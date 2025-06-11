@@ -1,17 +1,9 @@
-import axios from 'axios';
-import { ref, reactive } from 'vue';
+import { ref } from 'vue';
 import type { QueryRequest, QueryResponse, SchemaInfo } from '@/types/api';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+import { useAuth } from './useAuth';
 
 export function useApi() {
+  const { api } = useAuth();
   const loading = ref(false);
   const error = ref<string | null>(null);
 

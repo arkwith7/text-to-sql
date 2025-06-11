@@ -11,7 +11,26 @@
               <p class="text-sm text-gray-600">AI-powered natural language to SQL converter</p>
             </div>
           </div>
-          <div class="flex items-center space-x-2">
+          <div class="flex items-center space-x-4">
+            <!-- User info -->
+            <div v-if="user" class="flex items-center space-x-4">
+              <span class="text-sm text-gray-600">Welcome, {{ user.full_name }}</span>
+              <nav class="flex space-x-2">
+                <router-link
+                  to="/"
+                  class="bg-blue-100 text-blue-700 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  Analytics
+                </router-link>
+                <router-link
+                  to="/dashboard"
+                  class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  Dashboard
+                </router-link>
+              </nav>
+            </div>
+            <!-- Connection status -->
             <div
               class="flex items-center px-3 py-1 rounded-full text-sm"
               :class="isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
@@ -143,12 +162,14 @@
 import { ref, onMounted } from 'vue';
 import { Search, BarChart3, AlertCircle, Database, Lightbulb } from 'lucide-vue-next';
 import { useApi } from '@/composables/useApi';
+import { useAuth } from '@/composables/useAuth';
 import type { QueryResponse, ChartType } from '@/types/api';
 import DataVisualization from '@/components/DataVisualization.vue';
 import SqlDisplay from '@/components/SqlDisplay.vue';
 import InsightsPanel from '@/components/InsightsPanel.vue';
 
 const { loading, error, executeQuery: apiExecuteQuery, healthCheck } = useApi();
+const { user } = useAuth();
 
 const question = ref('');
 const queryResult = ref<QueryResponse | null>(null);

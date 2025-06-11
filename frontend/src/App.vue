@@ -1,7 +1,16 @@
 <template>
-  <Home />
+  <div id="app">
+    <router-view />
+  </div>
 </template>
 
 <script setup lang="ts">
-import Home from './views/Home.vue';
+import { onMounted } from 'vue';
+import { useAuth } from './composables/useAuth';
+
+const { initializeAuth } = useAuth();
+
+onMounted(async () => {
+  await initializeAuth();
+});
 </script>

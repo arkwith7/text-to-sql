@@ -9,6 +9,8 @@ AI-powered natural language to SQL converter with real-time data visualization.
 - **Northwind Database**: Complete e-commerce sample dataset
 - **AI Insights**: Intelligent analysis and recommendations
 - **Modern UI**: Responsive design with Tailwind CSS
+- **Landing Page**: Professional landing page showcasing business value and ROI
+- **Multi-language Support**: Korean and English interface
 
 ## 🏗️ Architecture
 
@@ -73,9 +75,12 @@ docker-compose up --build
 
 ### 4. Access the Application
 
-- **Frontend**: http://localhost:3000
+- **Landing Page**: http://localhost:3001 (비즈니스 가치 및 제품 소개)
+- **Application**: http://localhost:3001/home (로그인 후 메인 애플리케이션)
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
+
+> **참고**: 랜딩 페이지(`/`)는 인증 없이 접근 가능하며, 메인 애플리케이션은 로그인이 필요합니다.
 
 ## 🎯 Sample Questions
 
@@ -174,6 +179,7 @@ The project includes intelligent scripts that handle different scenarios:
 ### Local Development (without Docker)
 
 #### Backend
+
 ```bash
 cd backend
 pip install -r requirements.txt
@@ -181,6 +187,7 @@ uvicorn main:app --reload
 ```
 
 #### Frontend
+
 ```bash
 cd frontend
 npm install
@@ -188,6 +195,7 @@ npm run dev
 ```
 
 #### Database Only
+
 ```bash
 # Start only PostgreSQL
 ./db-helper.sh create
@@ -211,14 +219,14 @@ The application uses the **Northwind** database with these main tables:
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI service endpoint | Required |
-| `AZURE_OPENAI_API_KEY` | Azure OpenAI API key | Required |
-| `AZURE_OPENAI_API_VERSION` | API version | `2024-02-15-preview` |
-| `AZURE_OPENAI_DEPLOYMENT_NAME` | Model deployment name | `gpt-4o-mini` |
-| `DATABASE_URL` | PostgreSQL connection string | Auto-configured |
-| `VITE_API_BASE_URL` | Backend API URL for frontend | `http://localhost:8000` |
+| Variable                       | Description                   | Default                 |
+| ------------------------------ | ----------------------------- | ----------------------- |
+| `AZURE_OPENAI_ENDPOINT`        | Azure OpenAI service endpoint | Required                |
+| `AZURE_OPENAI_API_KEY`         | Azure OpenAI API key          | Required                |
+| `AZURE_OPENAI_API_VERSION`     | API version                   | `2024-02-15-preview`    |
+| `AZURE_OPENAI_DEPLOYMENT_NAME` | Model deployment name         | `gpt-4o-mini`           |
+| `DATABASE_URL`                 | PostgreSQL connection string  | Auto-configured         |
+| `VITE_API_BASE_URL`            | Backend API URL for frontend  | `http://localhost:8000` |
 
 ## 📁 Project Structure
 
@@ -282,34 +290,34 @@ The smart scripts automatically handle most PostgreSQL scenarios, but here are m
 ### Common Issues
 
 1. **Container startup fails**
+
    ```bash
    docker-compose down
    ./start-existing-db.sh
    ```
-
 2. **Port 5432 already in use**
+
    ```bash
    # Check what's using the port
    sudo lsof -i :5432
-   
+
    # Or stop conflicting containers
    docker stop $(docker ps -q --filter "publish=5432")
    ```
-
 3. **Azure OpenAI API errors**
    - Verify your API key and endpoint in `.env`
    - Check deployment name matches your Azure setup
    - Ensure you have sufficient quota
-
 4. **Frontend build errors**
+
    ```bash
    # Clear node modules and reinstall
    cd frontend
    rm -rf node_modules package-lock.json
    npm install
    ```
-
 5. **Backend dependency errors**
+
    ```bash
    # Rebuild backend container
    docker-compose build --no-cache backend
