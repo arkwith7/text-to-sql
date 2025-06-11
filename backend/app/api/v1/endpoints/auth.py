@@ -34,4 +34,4 @@ async def login(login_data: UserLogin, request: Request):
 async def refresh_token(refresh_request: RefreshTokenRequest, request: Request):
     """Refresh access token."""
     auth_service: AuthService = request.app.state.auth_service
-    return await auth_service.refresh_token(refresh_request.refresh_token) 
+    return await auth_service.refresh_access_token(refresh_request.refresh_token) 

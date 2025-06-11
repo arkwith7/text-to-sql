@@ -176,8 +176,8 @@ class AnalyticsService:
         """Log a performance metric."""
         try:
             insert_query = """
-            INSERT INTO performance_metrics (id, metric_name, metric_value, metric_unit, additional_data)
-            VALUES (:id, :metric_name, :metric_value, :metric_unit, :additional_data)
+            INSERT INTO performance_metrics (id, metric_name, metric_value, metric_unit, timestamp, additional_data)
+            VALUES (:id, :metric_name, :metric_value, :metric_unit, :timestamp, :additional_data)
             """
             
             params = {
@@ -185,6 +185,7 @@ class AnalyticsService:
                 "metric_name": metric_name,
                 "metric_value": metric_value,
                 "metric_unit": metric_unit,
+                "timestamp": datetime.now(timezone.utc),
                 "additional_data": json.dumps(additional_data) if additional_data else None
             }
 
