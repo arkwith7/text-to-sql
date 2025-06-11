@@ -4,6 +4,14 @@
 
 echo "🚀 Starting Smart Business Analytics Assistant..."
 
+# Check if Docker is installed
+if ! command -v docker &> /dev/null
+then
+    echo "❌ Docker가 설치되어 있지 않습니다. 스크립트를 계속 진행하려면 Docker를 먼저 설치해주세요."
+    echo "   Docker 설치 안내: https://docs.docker.com/get-docker/"
+    exit 1
+fi
+
 # Check if .env file exists
 if [ ! -f .env ]; then
     echo "⚠️  .env file not found. Copying from .env.example..."

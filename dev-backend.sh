@@ -39,6 +39,24 @@ elif ./db-helper.sh status | grep -q "NOT FOUND"; then
     sleep 10
 fi
 
+# Check if Redis is running
+echo "🔍 Checking Redis availability..."
+REDIS_CONTAINER_NAME="redis-stack"
+if docker ps --format "{{.Names}}" | grep -q "^${REDIS_CONTAINER_NAME}$"; then
+    echo "✅ Redis container '${REDIS_CONTAINER_NAME}' is running."
+elif docker ps -a --format "{{.Names}}" | grep -q "^${REDIS_CONTAINER_NAME}$"; then
+    echo "🔄 Found stopped Redis container. Starting it..."
+    docker start ${REDIS_CONTAINER_NAME}
+    sleep 3
+    echo "✅ Redis container started."
+else
+    echo "🚀 Redis container not found. Creating and starting a new one..."
+    docker run -d --name ${REDIS_CONTAINER_NAME} -p 6379:6379 -p 8001:8001 redis/redis-stack:latest
+    echo "⏳ Waiting for Redis to initialize..."
+    sleep 10
+    echo "✅ New Redis container created and running."
+fi
+
 # Set database URL for local development
 export DATABASE_URL="postgresql://postgres:password@localhost:5432/northwind"
 

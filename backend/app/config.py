@@ -2,7 +2,7 @@
 Configuration management for Text-to-SQL AI Agent
 Handles environment variables and application settings
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from typing import Optional
 import os
@@ -11,32 +11,39 @@ import os
 class Settings(BaseSettings):
     """Application settings with validation and type checking"""
     
+    # Model configuration for Pydantic V2
+    model_config = SettingsConfigDict(
+        env_file="../.env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra='ignore'
+    )
+    
     # Azure OpenAI Configuration
-    azure_openai_endpoint: str = Field(..., description="Azure OpenAI service endpoint")
-    azure_openai_api_key: str = Field(..., description="Azure OpenAI API key")
+    azure_openai_endpoint: str = Field(..., description="Azure OpenAI service endpoint", alias="AZURE_OPENAI_ENDPOINT")
+    azure_openai_api_key: str = Field(..., description="Azure OpenAI API key", alias="AZURE_OPENAI_API_KEY")
     azure_openai_api_version: str = Field(
         default="2024-02-15-preview", 
-        description="Azure OpenAI API version"
+        description="Azure OpenAI API version",
+        alias="AZURE_OPENAI_API_VERSION"
     )
     azure_openai_deployment_name: str = Field(
         default="gpt-4o-mini", 
-        description="Azure OpenAI model deployment name"
+        description="Azure OpenAI model deployment name",
+        alias="AZURE_OPENAI_DEPLOYMENT_NAME"
     )
     
     # Database Configuration
-    app_database_url: Optional[str] = Field(
-        default=None, 
-        description="Application database URL for user data"
+    app_database_url: str = Field(
+        default="sqlite:///./app_data.db", 
+        description="Application database URL for user data (SQLite)",
+        alias="APP_DATABASE_URL"
     )
     northwind_database_url: str = Field(
         default="postgresql://postgres:password@localhost:5432/northwind",
-        description="Northwind database URL for business data"
+        description="Northwind database URL for business data",
+        alias="NORTHWIND_DATABASE_URL"
     )
-    
-    # Legacy support - map DATABASE_URL to northwind_database_url
-    @property
-    def database_url(self) -> str:
-        return os.getenv("DATABASE_URL", self.northwind_database_url)
     
     # Redis Configuration
     redis_enabled: bool = Field(default=True, description="Enable Redis caching")
@@ -49,7 +56,8 @@ class Settings(BaseSettings):
     # Security Configuration
     jwt_secret_key: str = Field(
         default="your-secret-key-change-in-production-with-256-bit-key",
-        description="JWT signing secret key"
+        description="JWT signing secret key",
+        alias="JWT_SECRET_KEY"
     )
     jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
     access_token_expire_minutes: int = Field(
@@ -58,7 +66,7 @@ class Settings(BaseSettings):
     )
     
     # Application Configuration
-    environment: str = Field(default="development", description="Application environment")
+    environment: str = Field(default="development", description="Application environment", alias="ENVIRONMENT")
     debug: bool = Field(default=True, description="Debug mode")
     log_level: str = Field(default="INFO", description="Logging level")
     
@@ -89,22 +97,6 @@ class Settings(BaseSettings):
     )
     enable_api_keys: bool = Field(default=True, description="Enable API key authentication")
     password_min_length: int = Field(default=8, description="Minimum password length")
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        
-        # Map environment variables
-        fields = {
-            "azure_openai_endpoint": {"env": "AZURE_OPENAI_ENDPOINT"},
-            "azure_openai_api_key": {"env": "AZURE_OPENAI_API_KEY"},
-            "azure_openai_api_version": {"env": "AZURE_OPENAI_API_VERSION"},
-            "azure_openai_deployment_name": {"env": "AZURE_OPENAI_DEPLOYMENT_NAME"},
-            "app_database_url": {"env": "APP_DATABASE_URL"},
-            "northwind_database_url": {"env": ["DATABASE_URL", "NORTHWIND_DATABASE_URL"]},
-            "jwt_secret_key": {"env": "JWT_SECRET_KEY"},
-        }
 
 
 # Global settings instance

@@ -1,12 +1,12 @@
 """
 Database connection management for multi-database architecture
-Handles both application database and business data sources
+Handles both application database (SQLite) and business data sources (PostgreSQL)
 """
-from sqlalchemy import create_engine, text, MetaData, Table
+from sqlalchemy import text, MetaData
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.pool import QueuePool
-from contextlib import contextmanager
-from typing import Dict, Any, Optional, Generator
+from contextlib import asynccontextmanager
+from typing import Dict, Any, Optional, Generator, List
 import structlog
 from app.config import settings
 
@@ -17,46 +17,72 @@ Base = declarative_base()
 
 
 class DatabaseManager:
-    """Manages connections to multiple databases with connection pooling"""
-    
+    """Manages connections to multiple databases with appropriate connection pooling"""
+
     def __init__(self):
         self.engines: Dict[str, Any] = {}
         self.session_makers: Dict[str, Any] = {}
-        self._initialize_connections()
+        # Initialization is now deferred to an async method
     
+    async def initialize(self):
+        """Initialize database connections asynchronously."""
+        self._initialize_connections()
+        # Create all tables for the application database
+        await self.create_app_db_tables()
+        logger.info("Database manager initialized and app tables created.")
+
     def _initialize_connections(self):
         """Initialize database connections with proper configuration"""
-        # Application database (if configured)
+        # Application database (SQLite)
         if settings.app_database_url:
-            self.engines['app'] = create_engine(
-                settings.app_database_url,
-                poolclass=QueuePool,
-                pool_size=5,
+            is_sqlite = settings.app_database_url.startswith("sqlite")
+            
+            engine_args = {
+                "echo": settings.debug
+            }
+
+            app_db_url = settings.app_database_url
+            if is_sqlite and not app_db_url.startswith("sqlite+aiosqlite"):
+                 app_db_url = app_db_url.replace("sqlite://", "sqlite+aiosqlite://")
+
+            self.engines['app'] = create_async_engine(
+                app_db_url,
+                **engine_args
+            )
+            self.session_makers['app'] = sessionmaker(
+                bind=self.engines['app'], 
+                class_=AsyncSession, 
+                expire_on_commit=False
+            )
+            logger.info("Application database connection initialized", type="sqlite" if is_sqlite else "other")
+
+        # Northwind business database (PostgreSQL)
+        if settings.northwind_database_url:
+            northwind_db_url = settings.northwind_database_url
+            if "postgresql" in northwind_db_url and not northwind_db_url.startswith("postgresql+asyncpg"):
+                northwind_db_url = northwind_db_url.replace("postgresql://", "postgresql+asyncpg://")
+
+            self.engines['northwind'] = create_async_engine(
+                northwind_db_url,
+                pool_size=settings.connection_pool_size,
                 max_overflow=10,
                 pool_pre_ping=True,
                 echo=settings.debug
             )
-            self.session_makers['app'] = sessionmaker(bind=self.engines['app'])
-            logger.info("Application database connection initialized")
-        
-        # Northwind business database
-        self.engines['northwind'] = create_engine(
-            settings.database_url,  # Uses legacy DATABASE_URL for compatibility
-            poolclass=QueuePool,
-            pool_size=5,
-            max_overflow=10,
-            pool_pre_ping=True,
-            echo=settings.debug
-        )
-        self.session_makers['northwind'] = sessionmaker(bind=self.engines['northwind'])
-        logger.info("Northwind database connection initialized")
-    
-    async def initialize(self):
-        """Initialize database connections - compatibility method"""
-        # Connections are already initialized in __init__
-        # This method is for compatibility with startup/shutdown lifecycle
-        logger.info("Database manager initialized")
-        return True
+            self.session_makers['northwind'] = sessionmaker(
+                bind=self.engines['northwind'], 
+                class_=AsyncSession,
+                expire_on_commit=False
+            )
+            logger.info("Northwind database connection initialized", type="postgresql")
+
+    async def create_app_db_tables(self):
+        """Creates all tables in the application database based on the Base metadata."""
+        if 'app' in self.engines:
+            engine = self.get_engine('app')
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Tables created for the 'app' database.")
     
     def get_engine(self, db_name: str):
         """Get database engine by name"""
@@ -64,8 +90,8 @@ class DatabaseManager:
             raise ValueError(f"Database '{db_name}' not configured")
         return self.engines[db_name]
     
-    @contextmanager
-    def get_session(self, db_name: str) -> Generator:
+    @asynccontextmanager
+    async def get_session(self, db_name: str) -> Generator:
         """Get database session with automatic cleanup"""
         if db_name not in self.session_makers:
             raise ValueError(f"Database '{db_name}' not configured")
@@ -73,37 +99,34 @@ class DatabaseManager:
         session = self.session_makers[db_name]()
         try:
             yield session
-            session.commit()
+            await session.commit()
         except Exception as e:
-            session.rollback()
+            await session.rollback()
             logger.error(f"Database error in {db_name}", error=str(e))
             raise
         finally:
-            session.close()
+            await session.close()
     
-    @contextmanager
-    def get_connection(self, db_name: str) -> Generator:
+    @asynccontextmanager
+    async def get_connection(self, db_name: str) -> Generator:
         """Get raw database connection for direct SQL execution"""
         engine = self.get_engine(db_name)
-        conn = engine.connect()
-        try:
-            yield conn
-        except Exception as e:
-            logger.error(f"Connection error in {db_name}", error=str(e))
-            raise
-        finally:
-            conn.close()
+        async with engine.connect() as conn:
+            try:
+                yield conn
+            except Exception as e:
+                logger.error(f"Connection error in {db_name}", error=str(e))
+                raise
     
-    def execute_query(self, db_name: str, query: str, params: Optional[Dict] = None) -> Dict[str, Any]:
+    async def execute_query(self, db_name: str, query: str, params: Optional[Dict] = None) -> Dict[str, Any]:
         """Execute SQL query safely with error handling"""
         try:
-            with self.get_connection(db_name) as conn:
-                result = conn.execute(text(query), params or {})
+            async with self.get_connection(db_name) as conn:
+                result = await conn.execute(text(query), params or {})
                 
-                # Handle different query types
                 if result.returns_rows:
                     columns = list(result.keys())
-                    data = [dict(row._mapping) for row in result.fetchall()]
+                    data = [dict(row._mapping) for row in result.all()]
                     return {
                         'success': True,
                         'data': data,
@@ -111,6 +134,7 @@ class DatabaseManager:
                         'row_count': len(data)
                     }
                 else:
+                    await conn.commit() 
                     return {
                         'success': True,
                         'affected_rows': result.rowcount
@@ -124,76 +148,61 @@ class DatabaseManager:
                 'query': query
             }
     
-    def execute_query_safe(self, *args, **kwargs) -> Dict[str, Any]:
-        """Alias for execute_query with flexible parameter handling"""
-        # Handle different calling patterns for backward compatibility
-        if len(args) >= 2:
-            # Pattern: execute_query_safe(db_name, query, params)
-            return self.execute_query(args[0], args[1], args[2] if len(args) > 2 else kwargs.get('params'))
-        elif len(args) == 1 and 'database_type' in kwargs:
-            # Pattern: execute_query_safe(query, database_type="app")
-            return self.execute_query(kwargs['database_type'], args[0], kwargs.get('params'))
-        else:
-            # Fallback
-            db_name = kwargs.get('database_type', kwargs.get('db_name', 'app'))
-            query = args[0] if args else kwargs.get('query')
-            params = kwargs.get('params')
-            return self.execute_query(db_name, query, params)
+    async def execute_query_safe(self, query: str, database_type: str, params: Optional[Dict] = None) -> Dict[str, Any]:
+        """
+        Executes a query on the specified database. This is the primary method for running queries.
+        """
+        return await self.execute_query(database_type, query, params)
     
-    def get_schema_info(self, db_name: str) -> Dict[str, Any]:
-        """Get database schema information for AI context"""
-        try:
-            with self.get_connection(db_name) as conn:
-                metadata = MetaData()
-                metadata.reflect(bind=conn)
-                
+    async def get_schema_info(self, db_name: str = 'northwind') -> List[Dict[str, Any]]:
+        """
+        Get database schema information for a given database.
+        Returns a list of tables with their columns.
+        """
+        engine = self.get_engine(db_name)
+        metadata = MetaData()
+        
+        async with engine.connect() as conn:
+            try:
+                await conn.run_sync(metadata.reflect)
                 schema_info = []
-                for table_name in metadata.tables:
-                    table = metadata.tables[table_name]
-                    columns = []
-                    
-                    for column in table.columns:
-                        columns.append({
-                            'name': column.name,
-                            'type': str(column.type),
-                            'nullable': column.nullable,
-                            'primary_key': column.primary_key,
-                            'foreign_key': len(column.foreign_keys) > 0
-                        })
+                for table_name, table in metadata.tables.items():
+                    columns = [{
+                        "column_name": col.name,
+                        "data_type": str(col.type),
+                        "is_nullable": col.nullable,
+                    } for col in table.columns]
                     
                     schema_info.append({
-                        'table_name': table_name,
-                        'columns': columns,
-                        'primary_keys': [col.name for col in table.primary_key]
+                        "table_name": table_name,
+                        "columns": columns
                     })
-                
-                return {
-                    'success': True,
-                    'schema': schema_info,
-                    'table_count': len(schema_info)
-                }
-                
-        except Exception as e:
-            logger.error(f"Schema retrieval failed for {db_name}", error=str(e))
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
-    def test_connection(self, db_name: str) -> bool:
-        """Test database connection health"""
+                return schema_info
+            except Exception as e:
+                logger.error(f"Schema retrieval failed for {db_name}", error=str(e))
+                raise
+
+    async def test_connections(self) -> None:
+        """Test all configured database connections."""
+        for name in self.engines:
+            await self.test_connection(name)
+
+    async def test_connection(self, db_name: str) -> bool:
+        """Test database connection health asynchronously."""
         try:
-            with self.get_connection(db_name) as conn:
-                conn.execute(text("SELECT 1"))
-                return True
+            engine = self.get_engine(db_name)
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            logger.info(f"Connection test successful for {db_name}")
+            return True
         except Exception as e:
             logger.error(f"Connection test failed for {db_name}", error=str(e))
             return False
     
-    def close_all_connections(self):
-        """Close all database connections"""
+    async def close_all_connections(self):
+        """Dispose all engine connections."""
         for name, engine in self.engines.items():
-            engine.dispose()
+            await engine.dispose()
             logger.info(f"Closed connections for {name} database")
 
 
@@ -202,23 +211,27 @@ db_manager = DatabaseManager()
 
 
 # Convenience functions for common operations
-def get_northwind_connection():
+@asynccontextmanager
+async def get_northwind_connection():
     """Get connection to Northwind business database"""
-    return db_manager.get_connection('northwind')
+    async with db_manager.get_connection('northwind') as conn:
+        yield conn
 
 
-def get_app_connection():
+@asynccontextmanager
+async def get_app_connection():
     """Get connection to application database (if configured)"""
     if 'app' not in db_manager.engines:
         raise ValueError("Application database not configured")
-    return db_manager.get_connection('app')
+    async with db_manager.get_connection('app') as conn:
+        yield conn
 
 
-def execute_business_query(query: str, params: Optional[Dict] = None) -> Dict[str, Any]:
+async def execute_business_query(query: str, params: Optional[Dict] = None) -> Dict[str, Any]:
     """Execute query on business data (Northwind)"""
-    return db_manager.execute_query('northwind', query, params)
+    return await db_manager.execute_query('northwind', query, params)
 
 
-def get_business_schema() -> Dict[str, Any]:
+async def get_business_schema() -> List[Dict[str, Any]]:
     """Get business database schema for AI context"""
-    return db_manager.get_schema_info('northwind')
+    return await db_manager.get_schema_info('northwind')

@@ -9,29 +9,31 @@ These models define the structure for:
 - Performance metrics
 """
 
-from sqlalchemy import Column, String, Boolean, DateTime, Float, Integer, Text, JSON
-from sqlalchemy.dialects.postgresql import UUID, INET, JSONB
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import (
+    Column, String, Boolean, DateTime, Float, Integer, Text, JSON, ForeignKey
+)
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, timezone
 import uuid
 
-Base = declarative_base()
+# Import the Base from connection_manager to ensure models are registered correctly
+from .connection_manager import Base
 
 class User(Base):
     """User model for authentication and user management."""
     
     __tablename__ = "users"
     
-    id = Column(String(255), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(100), nullable=False)
     company = Column(String(100), nullable=True)
     role = Column(String(20), nullable=False, default="viewer")
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
     last_login = Column(DateTime(timezone=True), nullable=True)
     token_usage = Column(Integer, default=0, nullable=False)
     
@@ -43,15 +45,17 @@ class RefreshToken(Base):
     
     __tablename__ = "refresh_tokens"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String(255), nullable=False, index=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     token_hash = Column(String(255), nullable=False, unique=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
-    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    device_info = Column(JSONB, nullable=True)  # Store device/browser info
+    device_info = Column(JSON, nullable=True)  # Store device/browser info
     
+    user = relationship("User")
+
     def __repr__(self):
         return f"<RefreshToken(id='{self.id}', user_id='{self.user_id}', active='{self.is_active}')>"
 
@@ -60,9 +64,9 @@ class QueryAnalytics(Base):
     
     __tablename__ = "query_analytics"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    query_id = Column(String(255), nullable=False, index=True)
-    user_id = Column(String(255), nullable=False, index=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    query_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     question = Column(Text, nullable=False)
     sql_query = Column(Text, nullable=False)
     execution_time = Column(Float, nullable=False)  # in seconds
@@ -70,9 +74,11 @@ class QueryAnalytics(Base):
     success = Column(Boolean, nullable=False)
     error_message = Column(Text, nullable=True)
     chart_type = Column(String(50), nullable=True)
-    timestamp = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    timestamp = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
     
+    user = relationship("User")
+
     def __repr__(self):
         return f"<QueryAnalytics(id='{self.id}', user_id='{self.user_id}', success='{self.success}')>"
 
@@ -81,15 +87,17 @@ class Event(Base):
     
     __tablename__ = "events"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     event_type = Column(String(50), nullable=False, index=True)
-    user_id = Column(String(255), nullable=True, index=True)
-    event_data = Column(JSONB, nullable=True)
-    timestamp = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True)
-    ip_address = Column(INET, nullable=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    event_data = Column(JSON, nullable=True)
+    timestamp = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False, index=True)
+    ip_address = Column(String(45), nullable=True) # Support for IPv4 and IPv6
     user_agent = Column(Text, nullable=True)
-    session_id = Column(String(255), nullable=True)
+    session_id = Column(String(36), nullable=True)
     
+    user = relationship("User")
+
     def __repr__(self):
         return f"<Event(id='{self.id}', type='{self.event_type}', user_id='{self.user_id}')>"
 
@@ -98,12 +106,12 @@ class PerformanceMetric(Base):
     
     __tablename__ = "performance_metrics"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     metric_name = Column(String(100), nullable=False, index=True)
     metric_value = Column(Float, nullable=False)
     metric_unit = Column(String(20), nullable=True)
-    timestamp = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True)
-    additional_data = Column(JSONB, nullable=True)
+    timestamp = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False, index=True)
+    additional_data = Column(JSON, nullable=True)
     
     def __repr__(self):
         return f"<PerformanceMetric(name='{self.metric_name}', value='{self.metric_value}')>"
@@ -113,14 +121,16 @@ class UserSession(Base):
     
     __tablename__ = "user_sessions"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String(255), nullable=False, index=True)
-    session_start = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    session_start = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
     session_end = Column(DateTime(timezone=True), nullable=True)
-    ip_address = Column(INET, nullable=True)
+    ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
     queries_count = Column(Integer, default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+
+    user = relationship("User")
     
     def __repr__(self):
         return f"<UserSession(id='{self.id}', user_id='{self.user_id}', active='{self.is_active}')>"
@@ -130,18 +140,20 @@ class APIKey(Base):
     
     __tablename__ = "api_keys"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String(255), nullable=False, index=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     key_name = Column(String(100), nullable=False)
     key_hash = Column(String(255), nullable=False, unique=True)
     key_prefix = Column(String(20), nullable=False)  # First few chars for identification
-    permissions = Column(JSONB, nullable=True)  # Granular permissions
+    permissions = Column(JSON, nullable=True)  # Granular permissions
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     last_used = Column(DateTime(timezone=True), nullable=True)
     usage_count = Column(Integer, default=0, nullable=False)
     
+    user = relationship("User")
+
     def __repr__(self):
         return f"<APIKey(id='{self.id}', name='{self.key_name}', active='{self.is_active}')>"
 
@@ -150,8 +162,8 @@ class QueryTemplate(Base):
     
     __tablename__ = "query_templates"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String(255), nullable=True, index=True)  # Null for public templates
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)  # Null for public templates
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
     question_template = Column(Text, nullable=False)
@@ -160,9 +172,11 @@ class QueryTemplate(Base):
     is_public = Column(Boolean, default=False, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)  # Admin verified
     usage_count = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
     
+    user = relationship("User")
+
     def __repr__(self):
         return f"<QueryTemplate(id='{self.id}', name='{self.name}', public='{self.is_public}')>"
 
@@ -171,11 +185,11 @@ class DatabaseSchema(Base):
     
     __tablename__ = "database_schemas"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     database_name = Column(String(100), nullable=False)
     table_name = Column(String(100), nullable=False)
-    schema_info = Column(JSONB, nullable=False)
-    last_updated = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    schema_info = Column(JSON, nullable=False)
+    last_updated = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
     row_count = Column(Integer, nullable=True)
     table_size = Column(String(50), nullable=True)  # Human readable size
     
@@ -187,18 +201,20 @@ class AuditLog(Base):
     
     __tablename__ = "audit_logs"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String(255), nullable=True, index=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     action = Column(String(100), nullable=False)
     resource_type = Column(String(50), nullable=False)
-    resource_id = Column(String(255), nullable=True)
-    old_values = Column(JSONB, nullable=True)
-    new_values = Column(JSONB, nullable=True)
-    ip_address = Column(INET, nullable=True)
+    resource_id = Column(String(36), nullable=True)
+    old_values = Column(JSON, nullable=True)
+    new_values = Column(JSON, nullable=True)
+    ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
-    timestamp = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True)
+    timestamp = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False, index=True)
     success = Column(Boolean, nullable=False)
     error_message = Column(Text, nullable=True)
+
+    user = relationship("User")
     
     def __repr__(self):
         return f"<AuditLog(id='{self.id}', action='{self.action}', success='{self.success}')>"
@@ -208,14 +224,14 @@ class SystemConfig(Base):
     
     __tablename__ = "system_config"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     config_key = Column(String(100), nullable=False, unique=True)
-    config_value = Column(JSONB, nullable=False)
+    config_value = Column(JSON, nullable=False)
     description = Column(Text, nullable=True)
     is_sensitive = Column(Boolean, default=False, nullable=False)  # Don't log sensitive configs
-    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
-    updated_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    updated_by = Column(String(36), nullable=True)
     
     def __repr__(self):
         return f"<SystemConfig(key='{self.config_key}', sensitive='{self.is_sensitive}')>"
