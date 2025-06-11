@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     
     # Database Configuration
     app_database_url: str = Field(
-        default="sqlite:///./app_data.db", 
+        default="sqlite:///../app_data.db", 
         description="Application database URL for user data (SQLite)",
         alias="APP_DATABASE_URL"
     )
