@@ -10,7 +10,7 @@ export function useLogin() {
   };
 
   const loginDemo = async () => {
-    const demoCredentials: UserLogin = { email: "demo@example.com", password: "demo123" };
+    const demoCredentials: UserLogin = { email: "demo@example.com", password: "demo1234" };
     return await login(demoCredentials);
   };
 

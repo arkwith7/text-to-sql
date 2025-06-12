@@ -129,13 +129,15 @@
 import { ref, reactive } from 'vue';
 import { BarChart3, AlertCircle } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
+import { useLogin } from '@/composables/useLogin';
 import type { UserCreate, UserLogin } from '@/types/api';
 
 const emit = defineEmits<{
   success: [];
 }>();
 
-const { login, register, loading, error } = useAuth();
+const { register, loading, error } = useAuth();
+const { loginUser, loginDemo } = useLogin();
 
 const isLoginMode = ref(true);
 
@@ -161,11 +163,7 @@ const handleSubmit = async () => {
   let success = false;
 
   if (isLoginMode.value) {
-    const loginData: UserLogin = {
-      email: form.email,
-      password: form.password,
-    };
-    success = await login(loginData);
+    success = await loginUser(form.email, form.password);
   } else {
     const registerData: UserCreate = {
       email: form.email,
@@ -182,11 +180,7 @@ const handleSubmit = async () => {
 };
 
 const handleDemoLogin = async () => {
-  const loginData: UserLogin = {
-    email: 'user99@example.com',
-    password: 'password',
-  };
-  const success = await login(loginData);
+  const success = await loginDemo();
   
   if (success) {
     emit('success');
