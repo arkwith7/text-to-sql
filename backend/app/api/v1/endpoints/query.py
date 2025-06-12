@@ -14,6 +14,7 @@ from app.utils.validators import SQLValidator
 from app.agents.sql_agent import SQLAgent
 from app.database.connection_manager import DatabaseManager
 from app.auth.service import AuthService
+from app.auth.dependencies import get_current_user, get_current_user_optional
 from app.utils.cache import cache
 
 class QueryRequest(BaseModel):
@@ -38,16 +39,15 @@ class SchemaResponse(BaseModel):
 
 router = APIRouter()
 
-async def get_current_user_optional(request: Request):
-    auth_service: AuthService = request.app.state.auth_service
-    # Assuming get_current_user can handle being called without credentials
-    return await auth_service.get_current_user(request, required=False)
-
-async def check_rate_limit(request: Request):
-    """Check rate limits for the current user/IP."""
+async def check_rate_limit(request: Request, current_user=Depends(get_current_user)):
+    """Check rate limits for the current user."""
     settings = request.app.state.settings
     if not settings.rate_limit_enabled:
         return
+    
+    # TODO: Implement rate limiting logic using Redis or in-memory store
+    # For now, just return
+    return
     
     identifier = request.client.host
     # request.state.user might be set by the dependency
@@ -76,7 +76,7 @@ async def check_rate_limit(request: Request):
 async def execute_query(
     query_request: QueryRequest,
     request: Request,
-    current_user=Depends(get_current_user_optional)
+    current_user=Depends(get_current_user)
 ):
     """
     Process a natural language query, convert it to SQL, execute it,
@@ -84,7 +84,7 @@ async def execute_query(
     """
     start_time = time.time()
     query_id = str(uuid.uuid4())
-    user_id = current_user.id if current_user else None
+    user_id = current_user["id"] if current_user else None
     
     sql_agent: SQLAgent = request.app.state.sql_agent
     analytics_service: AnalyticsService = request.app.state.analytics_service
@@ -97,8 +97,7 @@ async def execute_query(
     await analytics_service.log_event(
         EventType.QUERY_SUBMITTED,
         user_id=user_id,
-        details={"question": query_request.question},
-        request=request
+        event_data={"question": query_request.question}
     )
 
     # Prepare agent input
@@ -160,7 +159,10 @@ async def execute_query(
     return response_data
 
 @router.get("/schema", response_model=SchemaResponse, tags=["Schema"])
-async def get_schema(request: Request, current_user=Depends(get_current_user_optional)):
+async def get_schema(
+    request: Request,
+    current_user=Depends(get_current_user)
+):
     """Get database schema information for the business database."""
     sql_agent: SQLAgent = request.app.state.sql_agent
     schema_analyzer = next((tool for tool in sql_agent.tools if tool.name == "schema_analyzer"), None)
@@ -179,15 +181,28 @@ async def get_schema(request: Request, current_user=Depends(get_current_user_opt
         raise HTTPException(status_code=500, detail=f"Failed to get schema: {str(e)}")
 
 @router.get("/queries/popular", tags=["Query"])
-async def get_popular_queries(request: Request, limit: int = 10, current_user=Depends(get_current_user_optional)):
+async def get_popular_queries(
+    request: Request, 
+    limit: int = 10,
+    current_user=Depends(get_current_user)
+):
     """Get most popular queries."""
     analytics_service: AnalyticsService = request.app.state.analytics_service
     return await analytics_service.get_popular_queries(limit)
 
 @router.post("/queries/suggestions", tags=["Query"])
-async def get_query_suggestions(query_data: Dict[str, Any], request: Request, current_user=Depends(get_current_user_optional)):
+async def get_query_suggestions(
+    query_data: Dict[str, Any], 
+    request: Request,
+    current_user=Depends(get_current_user)
+):
     """Get AI-powered query suggestions based on context. (Placeholder)"""
     return {
         "suggestions": ["What are the top 5 best-selling products?", "Show me the total sales per country.", "Who are the most valuable customers?"],
         "message": "Feature under development."
-    } 
+    }
+
+@router.get("/health", tags=["Health"])
+def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy"}

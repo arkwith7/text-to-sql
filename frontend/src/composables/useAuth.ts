@@ -46,7 +46,7 @@ export function useAuth() {
     error.value = null;
 
     try {
-      const response = await api.post<Token>('/auth/register', userData);
+      const response = await api.post<Token>('/api/v1/auth/register', userData);
       const tokenData = response.data;
       
       // Store token and user data
@@ -69,7 +69,7 @@ export function useAuth() {
     error.value = null;
 
     try {
-      const response = await api.post<Token>('/auth/login', credentials);
+      const response = await api.post<Token>('/api/v1/auth/login', credentials);
       const tokenData = response.data;
       
       // Store token and user data

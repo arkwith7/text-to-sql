@@ -4,6 +4,7 @@ API routes for user authentication.
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 
 from app.auth.service import AuthService, UserCreate, UserLogin, TokenResponse, RefreshTokenRequest
+from app.auth.dependencies import get_current_user
 from app.analytics.service import AnalyticsService, EventType
 
 router = APIRouter()
@@ -16,7 +17,7 @@ async def register(user_data: UserCreate, request: Request):
     
     user = await auth_service.create_user(user_data, analytics_service=analytics_service)
     
-    return await auth_service.create_token(user.id)
+    return await auth_service.create_token(user["id"])
 
 @router.post("/login", response_model=TokenResponse, tags=["Authentication"])
 async def login(login_data: UserLogin, request: Request):
@@ -34,4 +35,33 @@ async def login(login_data: UserLogin, request: Request):
 async def refresh_token(refresh_request: RefreshTokenRequest, request: Request):
     """Refresh access token."""
     auth_service: AuthService = request.app.state.auth_service
-    return await auth_service.refresh_access_token(refresh_request.refresh_token) 
+    return await auth_service.refresh_access_token(refresh_request.refresh_token)
+
+@router.post("/logout", tags=["Authentication"])
+async def logout(
+    refresh_request: RefreshTokenRequest, 
+    request: Request,
+    current_user=Depends(get_current_user)
+):
+    """Logout user by invalidating refresh token."""
+    auth_service: AuthService = request.app.state.auth_service
+    await auth_service.logout(refresh_request.refresh_token)
+    return {"message": "Successfully logged out"}
+
+@router.get("/me", tags=["Authentication"])
+async def get_current_user_info(
+    request: Request,
+    current_user=Depends(get_current_user)
+):
+    """Get current user information."""
+    return {
+        "id": current_user["id"],
+        "email": current_user["email"],
+        "full_name": current_user["full_name"],
+        "company": current_user.get("company"),
+        "role": current_user["role"],
+        "is_active": current_user["is_active"],
+        "created_at": current_user["created_at"],
+        "last_login": current_user.get("last_login"),
+        "token_usage": current_user.get("token_usage", 0)
+    } 

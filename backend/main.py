@@ -21,6 +21,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.openapi.utils import get_openapi
 import uvicorn
 
 # Application imports
@@ -30,13 +31,14 @@ from app.config import get_settings, validate_settings
 from app.database.connection_manager import DatabaseManager
 from app.agents.sql_agent import SQLAgent
 from app.auth.service import AuthService
+from app.auth.security import get_openapi_security_schemes
 from app.analytics.service import AnalyticsService
 from app.utils.cache import cache
 from app.api.v1.api import api_router
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -85,7 +87,33 @@ app = FastAPI(
     title="Smart Business Analytics Assistant",
     description="AI-powered Text-to-SQL application with advanced analytics",
     version="2.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    openapi_tags=[
+        {
+            "name": "Authentication",
+            "description": "User authentication and authorization"
+        },
+        {
+            "name": "AI Query",
+            "description": "Natural language to SQL query processing"
+        },
+        {
+            "name": "Schema",
+            "description": "Database schema information"
+        },
+        {
+            "name": "Analytics",
+            "description": "Usage analytics and system metrics"
+        },
+        {
+            "name": "Admin",
+            "description": "Administrative functions (requires admin role)"
+        },
+        {
+            "name": "System",
+            "description": "System health and status endpoints"
+        }
+    ]
 )
 
 # Add middleware
@@ -103,6 +131,39 @@ if get_settings().environment == "production":
     )
 
 app.include_router(api_router, prefix="/api/v1")
+
+
+def custom_openapi():
+    """Custom OpenAPI schema with JWT authentication."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    
+    # Add security schemes
+    openapi_schema["components"]["securitySchemes"] = get_openapi_security_schemes()
+    
+    # Add security to all protected endpoints
+    for path, path_data in openapi_schema["paths"].items():
+        for method, operation in path_data.items():
+            if isinstance(operation, dict) and "tags" in operation:
+                # Skip authentication endpoints and system endpoints
+                if any(tag in ["Authentication", "System"] for tag in operation["tags"]):
+                    continue
+                # Add security requirement for protected endpoints if not present
+                if "security" not in operation:
+                    operation["security"] = [{"JWTBearer": []}]
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 @app.middleware("http")
 async def track_requests(request: Request, call_next):

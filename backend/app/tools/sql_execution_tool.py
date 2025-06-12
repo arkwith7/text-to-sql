@@ -31,13 +31,12 @@ class SQLExecutionTool(BaseTool):
     Implements multiple security layers and result formatting
     """
     
-    name = "sql_execution"
-    description = """Execute SQL queries on specified database with safety checks.
+    name: str = "sql_execution"
+    description: str = """Execute SQL queries on specified database with safety checks.
     Use this tool to run SELECT queries on business data.
     The tool automatically validates queries and applies security constraints."""
-    
-    args_schema = SQLExecutionInput
-    max_result_size = 1000  # Maximum rows to return
+    args_schema: type = SQLExecutionInput
+    max_result_size: int = 1000  # Maximum rows to return
     
     def __init__(self):
         super().__init__()

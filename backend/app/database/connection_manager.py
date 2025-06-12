@@ -44,6 +44,8 @@ class DatabaseManager:
             app_db_url = settings.app_database_url
             if is_sqlite and not app_db_url.startswith("sqlite+aiosqlite"):
                  app_db_url = app_db_url.replace("sqlite://", "sqlite+aiosqlite://")
+            
+            logger.info(f"Using app database URL: {app_db_url}")
 
             self.engines['app'] = create_async_engine(
                 app_db_url,
@@ -61,6 +63,8 @@ class DatabaseManager:
             northwind_db_url = settings.northwind_database_url
             if "postgresql" in northwind_db_url and not northwind_db_url.startswith("postgresql+asyncpg"):
                 northwind_db_url = northwind_db_url.replace("postgresql://", "postgresql+asyncpg://")
+            
+            logger.info(f"Using northwind database URL: {northwind_db_url}")
 
             self.engines['northwind'] = create_async_engine(
                 northwind_db_url,

@@ -63,10 +63,10 @@ class SchemaAnalyzerTool(BaseTool):
         """Async version of schema analysis."""
         return self._run(table_name)
     
-    def _analyze_full_schema(self) -> str:
+    async def _analyze_full_schema(self) -> str:
         """Analyze the complete database schema."""
         try:
-            schema_info = self.db_manager.get_schema_info()
+            schema_info = await self.db_manager.get_schema_info()
             
             # Enhance schema info with additional details
             enhanced_schema = {
@@ -104,11 +104,11 @@ class SchemaAnalyzerTool(BaseTool):
             logger.error(f"Error in full schema analysis: {str(e)}")
             raise
     
-    def _analyze_specific_table(self, table_name: str) -> str:
+    async def _analyze_specific_table(self, table_name: str) -> str:
         """Analyze a specific table in detail."""
         try:
             # Verify table exists
-            schema_info = self.db_manager.get_schema_info()
+            schema_info = await self.db_manager.get_schema_info()
             table_exists = any(
                 table["table_name"].lower() == table_name.lower() 
                 for table in schema_info

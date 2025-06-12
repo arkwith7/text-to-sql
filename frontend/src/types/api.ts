@@ -1,13 +1,19 @@
 export interface QueryRequest {
   question: string;
+  context?: string;
 }
 
 export interface QueryResponse {
+  query_id?: string;
   sql_query: string;
   data: Record<string, any>[];
   columns: string[];
+  row_count: number;
   chart_suggestion?: string;
   insights?: string;
+  explanation?: string;
+  confidence?: string;
+  execution_time: number;
 }
 
 export interface TableInfo {

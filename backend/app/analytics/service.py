@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from enum import Enum
 import json
 import uuid
+from fastapi import Request
 
 from ..database.connection_manager import DatabaseManager
 from ..config import get_settings
@@ -33,6 +34,8 @@ class EventType(str, Enum):
     ERROR_OCCURRED = "error_occurred"
     API_REQUEST = "api_request"
     SCHEMA_ANALYZED = "schema_analyzed"
+    QUERY_SUBMITTED = "query_submitted"
+    QUERY_COMPLETED = "query_completed"
 
 class QueryAnalytics(BaseModel):
     """Query analytics data model."""
@@ -138,33 +141,28 @@ class AnalyticsService:
         event_type: EventType,
         user_id: Optional[str] = None,
         event_data: Optional[Dict[str, Any]] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None
+        details: Optional[Dict[str, Any]] = None,
+        request: Optional[Request] = None
     ):
-        """Log a general event."""
+        """
+        Logs an event with optional details and request context.
+        """
         try:
-            insert_query = """
-            INSERT INTO events (id, event_type, user_id, event_data, ip_address, user_agent)
-            VALUES (:id, :event_type, :user_id, :event_data, :ip_address, :user_agent)
-            """
-            
-            params = {
-                "id": str(uuid.uuid4()),
-                "event_type": event_type.value,
+            event = {
+                "type": event_type,
                 "user_id": user_id,
-                "event_data": json.dumps(event_data) if event_data else None,
-                "ip_address": ip_address,
-                "user_agent": user_agent
+                "data": event_data,
+                "details": details,
+                "timestamp": datetime.utcnow().isoformat(),
+                "request": {
+                    "method": request.method,
+                    "url": str(request.url)
+                } if request else None
             }
-
-            await self.db_manager.execute_query_safe(
-                insert_query,
-                params=params,
-                database_type="app"
-            )
-            
+            # Save event to database or log it
+            await self._save_event_to_db(event)
         except Exception as e:
-            logger.error(f"Error logging event: {str(e)}")
+            logger.error(f"Failed to log event: {e}")
     
     async def log_performance_metric(
         self,

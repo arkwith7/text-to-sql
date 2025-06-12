@@ -13,7 +13,7 @@ export function useApi() {
 
     try {
       const request: QueryRequest = { question };
-      const response = await api.post<QueryResponse>('/query', request);
+      const response = await api.post<QueryResponse>('/api/v1/query', request);
       return response.data;
     } catch (err: any) {
       error.value = err.response?.data?.detail || 'An error occurred';
@@ -29,7 +29,7 @@ export function useApi() {
     error.value = null;
 
     try {
-      const response = await api.get<SchemaInfo>('/schema');
+      const response = await api.get<SchemaInfo>('/api/v1/schema');
       return response.data;
     } catch (err: any) {
       error.value = err.response?.data?.detail || 'Failed to fetch schema';
@@ -42,7 +42,7 @@ export function useApi() {
 
   const healthCheck = async (): Promise<boolean> => {
     try {
-      await api.get('/health');
+      await api.get('/api/v1/health');
       return true;
     } catch {
       return false;

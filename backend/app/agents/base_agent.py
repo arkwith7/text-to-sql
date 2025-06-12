@@ -76,7 +76,7 @@ class BaseAgent(ABC):
                 tools=self.tools,
                 verbose=settings.debug,
                 max_iterations=5,
-                early_stopping_method="generate",
+                early_stopping_method="force",
                 handle_parsing_errors=True
             )
             logger.info(f"Agent setup completed with {len(self.tools)} tools")
