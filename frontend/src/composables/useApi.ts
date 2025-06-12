@@ -49,10 +49,31 @@ export function useApi() {
     }
   };
 
+  // Chat-integrated query execution
+  const executeQueryWithChat = async (
+    question: string, 
+    sessionId?: string
+  ): Promise<{ queryResponse: QueryResponse | null; sessionId: string | null }> => {
+    // First execute the regular query
+    const queryResponse = await executeQuery(question);
+    
+    if (!queryResponse) {
+      return { queryResponse: null, sessionId: null };
+    }
+
+    // If we have a successful query response, we can integrate with chat
+    // This would be used by chat components to save the query result
+    return { 
+      queryResponse, 
+      sessionId: sessionId || null 
+    };
+  };
+
   return {
     loading,
     error,
     executeQuery,
+    executeQueryWithChat,
     getSchema,
     healthCheck,
   };

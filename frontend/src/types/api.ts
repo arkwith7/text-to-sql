@@ -73,3 +73,45 @@ export interface TokenUsageStats {
   monthly_usage?: Record<string, number>;
   average_tokens_per_query?: number;
 }
+
+// Chat Session Types
+export interface ChatSession {
+  session_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  is_active: boolean;
+  message_count: number;
+}
+
+export interface ChatMessage {
+  message_id: string;
+  session_id: string;
+  user_message: string;
+  ai_response: string;
+  query_result?: Record<string, any>;
+  timestamp: string;
+  sequence_number: number;
+}
+
+export interface CreateSessionRequest {
+  title?: string;
+  context?: string;
+}
+
+export interface AddMessageRequest {
+  user_message: string;
+  ai_response: string;
+  query_result?: Record<string, any>;
+}
+
+export interface SessionListResponse {
+  sessions: ChatSession[];
+  total_count: number;
+}
+
+export interface SessionMessagesResponse {
+  session_id: string;
+  messages: ChatMessage[];
+  total_count: number;
+}

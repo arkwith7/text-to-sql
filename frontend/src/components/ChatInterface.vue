@@ -152,16 +152,24 @@
                activeTab === 'profile' ? '사용자 프로필' : '새로운 질문' }}
           </h2>
           
-          <!-- Connection Status -->
-          <div
-            class="flex items-center px-3 py-1 rounded-full text-sm"
-            :class="isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
-          >
+          <div class="flex items-center space-x-4">
+            <!-- New Chat Button -->
+            <button
+              v-if="activeTab === 'chat'"
+              @click="startNewChat"
+              class="px-4 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
+            >새 대화 시작</button>
+            <!-- Connection Status -->
             <div
-              class="w-2 h-2 rounded-full mr-2"
-              :class="isConnected ? 'bg-green-500' : 'bg-red-500'"
-            ></div>
-            {{ isConnected ? 'Connected' : 'Disconnected' }}
+              class="flex items-center px-3 py-1 rounded-full text-sm"
+              :class="isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+            >
+              <div
+                class="w-2 h-2 rounded-full mr-2"
+                :class="isConnected ? 'bg-green-500' : 'bg-red-500'"
+              ></div>
+              {{ isConnected ? 'Connected' : 'Disconnected' }}
+            </div>
           </div>
         </div>
       </header>
@@ -234,33 +242,65 @@
                 rows="2"
                 @keydown.ctrl.enter="sendCurrentMessage"
                 @keydown.enter.prevent="sendCurrentMessage"
-                :disabled="loading"
+                :disabled="loading || chatLoading || isStreaming"
               ></textarea>
             </div>
             <button
               @click="sendCurrentMessage"
-              :disabled="!currentMessage.trim() || loading"
+              :disabled="!currentMessage.trim() || loading || chatLoading || isStreaming"
               class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
               <Send class="w-4 h-4" />
             </button>
           </div>
-          <p class="text-xs text-gray-500 mt-2">Ctrl+Enter 또는 Enter로 전송</p>
+          <p class="text-xs text-gray-500 mt-2">
+            {{ isStreaming ? '쿼리 처리 중...' : 'Ctrl+Enter 또는 Enter로 전송' }}
+          </p>
         </div>
       </div>
 
       <!-- History Tab -->
-      <div v-else-if="activeTab === 'history'" class="flex-1 p-6">
-        <div class="text-center py-12">
+      <div v-else-if="activeTab === 'history'" class="flex-1 p-6 overflow-y-auto">
+        <div v-if="sessions.length === 0" class="text-center py-12">
           <Clock class="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p class="text-gray-600">대화 기록이 여기에 표시됩니다.</p>
+          <h3 class="text-lg font-medium text-gray-900 mb-2">대화 기록이 없습니다</h3>
+          <p class="text-gray-600">새로운 채팅을 시작해보세요!</p>
+        </div>
+        
+        <div v-else class="space-y-4">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">대화 기록 ({{ sessions.length }}개)</h3>
+          
+          <div 
+            v-for="session in sessions" 
+            :key="session.session_id"
+            class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+            @click="switchToSessionAndGoToChat(session.session_id)"
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex-1">
+                <h4 class="font-medium text-gray-900">{{ session.title }}</h4>
+                <p class="text-sm text-gray-600 mt-1">
+                  {{ session.message_count }}개 메시지 • {{ formatDate(session.updated_at) }}
+                </p>
+              </div>
+              <button
+                @click.stop="confirmDeleteSession(session.session_id)"
+                class="text-red-600 hover:text-red-800 p-2"
+                title="세션 삭제"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Saved Queries Tab -->
       <div v-else-if="activeTab === 'saved'" class="flex-1 p-6">
         <div class="text-center py-12">
-          <BookMark class="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <Bookmark class="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p class="text-gray-600">저장된 쿼리가 여기에 표시됩니다.</p>
         </div>
       </div>
@@ -270,11 +310,23 @@
         <UserProfile />
       </div>
     </div>
+
+    <!-- Streaming Progress Modal -->
+    <StreamingProgress
+      :is-visible="isStreaming"
+      :progress="streamingProgress"
+      :current-message="streamingMessage"
+      :events="streamingEvents"
+      :error="streamingError"
+      :is-streaming="isStreaming"
+      @cancel="handleStreamingCancel"
+      @close="handleStreamingClose"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, watch } from 'vue';
+import { ref, nextTick, onMounted, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { 
   BarChart3, 
@@ -288,13 +340,39 @@ import {
 } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
 import { useApi } from '@/composables/useApi';
+import { useChatSession } from '@/composables/useChatSession';
+import { useStreaming } from '@/composables/useStreaming';
 import ChatMessage from './ChatMessage.vue';
 import UserProfile from './UserProfile.vue';
-import type { QueryResponse } from '@/types/api';
+import StreamingProgress from './StreamingProgress.vue';
+import type { QueryResponse, ChatMessage as ApiChatMessage } from '@/types/api';
 
 const router = useRouter();
 const { user, logout: authLogout } = useAuth();
-const { executeQuery: apiExecuteQuery, loading } = useApi();
+const { loading } = useApi();
+const {
+  currentSession,
+  sessions,
+  messages: chatMessages,
+  loading: chatLoading,
+  hasActiveSession,
+  createNewSession,
+  loadUserSessions,
+  switchToSession,
+  addMessageToSession,
+  deleteSession,
+  clearCurrentSession
+} = useChatSession();
+
+const {
+  streamQuery,
+  isStreaming,
+  currentMessage: streamingMessage,
+  progress: streamingProgress,
+  events: streamingEvents,
+  error: streamingError,
+  clearEvents
+} = useStreaming();
 
 const activeTab = ref('chat');
 const currentMessage = ref('');
@@ -304,7 +382,8 @@ const isUserScrolledUp = ref(false);
 const shouldAutoScroll = ref(true);
 const isCollapsed = ref(false);
 
-interface Message {
+// UI Message interface for display
+interface UIMessage {
   id: string;
   type: 'user' | 'assistant';
   content: string;
@@ -313,7 +392,31 @@ interface Message {
   error?: string;
 }
 
-const messages = ref<Message[]>([]);
+// Convert chat messages to UI messages
+const messages = computed<UIMessage[]>(() => {
+  const uiMessages: UIMessage[] = [];
+  
+  chatMessages.value.forEach((msg: ApiChatMessage) => {
+    // Add user message
+    uiMessages.push({
+      id: `${msg.message_id}-user`,
+      type: 'user',
+      content: msg.user_message,
+      timestamp: new Date(msg.timestamp)
+    });
+    
+    // Add assistant message
+    uiMessages.push({
+      id: `${msg.message_id}-assistant`,
+      type: 'assistant',
+      content: msg.ai_response,
+      timestamp: new Date(msg.timestamp),
+      queryResult: msg.query_result as QueryResponse
+    });
+  });
+  
+  return uiMessages;
+});
 
 const sampleQuestions = [
   "지난 3개월간 가장 많이 팔린 제품 5개는?",
@@ -322,51 +425,90 @@ const sampleQuestions = [
   "카테고리별 평균 주문 금액은?"
 ];
 
+// Helper functions
+const formatDate = (dateString: string): string => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+const switchToSessionAndGoToChat = async (sessionId: string) => {
+  const success = await switchToSession(sessionId);
+  if (success) {
+    activeTab.value = 'chat';
+  }
+};
+
+const confirmDeleteSession = async (sessionId: string) => {
+  if (confirm('이 대화를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+    await deleteSession(sessionId);
+  }
+};
+
 const sendMessage = async (content: string) => {
   if (!content.trim()) return;
 
-  // Add user message
-  const userMessage: Message = {
-    id: Date.now().toString(),
-    type: 'user',
-    content: content.trim(),
-    timestamp: new Date()
-  };
-  messages.value.push(userMessage);
+  // Ensure session exists
+  if (!hasActiveSession.value) {
+    const created = await createNewSession(`Chat - ${new Date().toLocaleString()}`);
+    if (!created) {
+      console.error('채팅 세션 생성 실패');
+      return;
+    }
+  }
 
-  // Clear input
+  // Clear input immediately for better UX
   currentMessage.value = '';
 
-  // Scroll to bottom after user message
+  // Use streaming for real-time feedback
+  await streamQuery(
+    content.trim(),
+    currentSession.value?.session_id,
+    // onProgress callback
+    (event) => {
+      console.log('Streaming event:', event);
+    },
+    // onComplete callback
+    async (result) => {
+      console.log('Query completed:', result);
+      // Scroll to bottom after completion
+      await nextTick();
+      scrollToBottom(true);
+      // Refresh the current session to get the latest messages
+      if (currentSession.value) {
+        await switchToSession(currentSession.value.session_id);
+      }
+    },
+    // onError callback
+    (error) => {
+      console.error('Streaming error:', error);
+    }
+  );
+};
+
+// Start a new chat session
+const startNewChat = async () => {
+  clearCurrentSession();
+  activeTab.value = 'chat';
+  currentMessage.value = '';
   await nextTick();
   scrollToBottom(true);
+};
 
-  try {
-    const response = await apiExecuteQuery(content.trim());
+// Streaming event handlers
+const handleStreamingCancel = () => {
+  // Stop the streaming process
+  clearEvents();
+};
 
-    if (response) {
-      // Add assistant response
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: `질문: "${content}"\n\n결과를 확인해주세요.`,
-        timestamp: new Date(),
-        queryResult: response
-      };
-      messages.value.push(assistantMessage);
-    }
-
-  } catch (error) {
-    // Add error message
-    const errorMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      type: 'assistant',
-      content: '죄송합니다. 요청을 처리하는 중 오류가 발생했습니다.',
-      timestamp: new Date(),
-      error: error instanceof Error ? error.message : '알 수 없는 오류'
-    };
-    messages.value.push(errorMessage);
-  }
+const handleStreamingClose = () => {
+  // Clear streaming events after completion
+  clearEvents();
 };
 
 const sendCurrentMessage = () => {
@@ -402,7 +544,7 @@ const logout = async () => {
   router.push('/login');
 };
 
-// Watch messages array for changes and auto-scroll
+// Watch computed messages for changes and auto-scroll
 watch(
   () => messages.value.length,
   async () => {
@@ -413,7 +555,7 @@ watch(
 
 // Watch loading state to ensure scroll to bottom when response arrives
 watch(
-  () => loading.value,
+  () => loading.value || chatLoading.value,
   async (newLoading, oldLoading) => {
     // When loading ends (response received), scroll to bottom
     if (oldLoading && !newLoading) {
@@ -423,7 +565,10 @@ watch(
   }
 );
 
-onMounted(() => {
+onMounted(async () => {
+  // Load user's chat sessions
+  await loadUserSessions();
+  
   // Check connection status
   // TODO: Implement actual connection check
 });

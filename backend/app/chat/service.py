@@ -30,39 +30,45 @@ class ChatSessionService:
         """Initialize chat session service with database manager."""
         self.db_manager = db_manager
         
-    async def create_session(self, user_id: str, title: Optional[str] = None) -> str:
+    async def create_session(self, user_id: str, title: Optional[str] = None, context: Optional[str] = None) -> Dict[str, Any]:
         """
-        Create a new chat session for a user.
-        
-        Args:
-            user_id: The ID of the user creating the session
-            title: Optional title for the session
-            
-        Returns:
-            The ID of the newly created session
+        Create a new chat session for a user and return session data.
         """
         session_id = str(uuid.uuid4())
         
         try:
             query = """
-            INSERT INTO chat_sessions (id, user_id, title, is_active, created_at, updated_at)
-            VALUES (:id, :user_id, :title, :is_active, :created_at, :updated_at)
+            INSERT INTO chat_sessions (
+                id, user_id, title, is_active,
+                created_at, updated_at, last_message_at, message_count
+            ) VALUES (
+                :id, :user_id, :title, :is_active,
+                :created_at, :updated_at, :last_message_at, :message_count
+            )
             """
-            
+            now = datetime.now(timezone.utc)
             params = {
                 "id": session_id,
                 "user_id": user_id,
-                "title": title or f"Chat Session {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                "title": title or f"Chat Session {now.strftime('%Y-%m-%d %H:%M')}",
                 "is_active": True,
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc)
+                "created_at": now,
+                "updated_at": now,
+                "last_message_at": now,
+                "message_count": 0
             }
             
             await self.db_manager.execute_query_safe(query, params=params, database_type="app")
             
             logger.info(f"Created new chat session {session_id} for user {user_id}")
-            return session_id
-            
+            return {
+                "session_id": session_id,
+                "title": params["title"],
+                "created_at": params["created_at"],
+                "updated_at": params["updated_at"],
+                "is_active": True,
+                "message_count": 0
+            }
         except Exception as e:
             logger.error(f"Error creating chat session: {str(e)}")
             raise

@@ -4,6 +4,8 @@ API routes for chat session management.
 import uuid
 from typing import List, Optional
 from datetime import datetime
+import logging
+import traceback
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -13,6 +15,7 @@ from app.chat.service import ChatSessionService
 from app.analytics.service import AnalyticsService, EventType
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Request/Response Models for Chat API
 class CreateSessionRequest(BaseModel):
@@ -67,12 +70,15 @@ async def create_chat_session(
             context=request_data.context
         )
         
-        # Log analytics event
-        await analytics_service.log_event(
-            user_id=current_user["id"],
-            event_type=EventType.CHAT_SESSION_CREATED,
-            metadata={"session_id": session["session_id"]}
-        )
+        # Log analytics event (non-blocking)
+        try:
+            await analytics_service.log_event(
+                user_id=current_user["id"],
+                event_type=EventType.CHAT_SESSION_CREATED,
+                metadata={"session_id": session["session_id"]}
+            )
+        except Exception as log_err:
+            logger.error(f"Analytics logging failed: {log_err}")
         
         return SessionResponse(
             session_id=session["session_id"],
@@ -84,6 +90,8 @@ async def create_chat_session(
         )
         
     except Exception as e:
+        tb = traceback.format_exc()
+        logger.error(f"Failed to create chat session: {tb}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create chat session: {str(e)}"

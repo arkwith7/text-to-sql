@@ -98,9 +98,19 @@ case "$1" in
                     -e POSTGRES_USER=postgres \
                     -e POSTGRES_PASSWORD=password \
                     -p 5432:5432 \
-                    -v "$(pwd)/postgre/northwind.sql:/docker-entrypoint-initdb.d/northwind.sql" \
                     postgres:15
-                echo "✅ PostgreSQL container created and starting..."
+                echo "⏳ Waiting for PostgreSQL to initialize..."
+                sleep 10
+
+                echo "📥 Downloading Northwind SQL dump..."
+                curl -s -o northwind.sql https://raw.githubusercontent.com/pthom/northwind_psql/master/northwind.sql
+
+                echo "🔄 Importing data into Northwind database..."
+                docker cp northwind.sql northwind-postgres:/northwind.sql
+                docker exec northwind-postgres psql -U postgres -d northwind -f /northwind.sql
+                rm northwind.sql
+
+                echo "✅ Northwind database ready (localhost:5432, DB: northwind, User: postgres, Password: password)"
             fi
         fi
         
