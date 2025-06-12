@@ -64,4 +64,41 @@ async def get_current_user_info(
         "created_at": current_user["created_at"],
         "last_login": current_user.get("last_login"),
         "token_usage": current_user.get("token_usage", 0)
-    } 
+    }
+
+@router.get("/stats", tags=["Authentication"])
+async def get_user_stats(
+    request: Request,
+    current_user=Depends(get_current_user)
+):
+    """Get user usage statistics including token usage."""
+    analytics_service: AnalyticsService = request.app.state.analytics_service
+    
+    try:
+        # Get user statistics from analytics service
+        stats = await analytics_service.get_user_stats(current_user["id"])
+        
+        return {
+            "user_id": current_user["id"],
+            "total_queries": stats.get("total_queries", 0),
+            "total_tokens": stats.get("total_tokens", 0),
+            "input_tokens": stats.get("input_tokens", 0),
+            "output_tokens": stats.get("output_tokens", 0),
+            "last_query_at": stats.get("last_query_at"),
+            "daily_usage": stats.get("daily_usage", {}),
+            "monthly_usage": stats.get("monthly_usage", {}),
+            "average_tokens_per_query": stats.get("average_tokens_per_query", 0)
+        }
+    except Exception as e:
+        # Return default stats if analytics service fails
+        return {
+            "user_id": current_user["id"],
+            "total_queries": 0,
+            "total_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "last_query_at": None,
+            "daily_usage": {},
+            "monthly_usage": {},
+            "average_tokens_per_query": 0
+        } 

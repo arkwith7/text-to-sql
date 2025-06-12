@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ref, reactive, computed } from 'vue';
+import { ref, computed } from 'vue';
 import type { User, UserCreate, UserLogin, Token, TokenUsageStats } from '@/types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -31,8 +31,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      logout();
+      // Token expired or invalid - call logout function
+      const authLogout = () => {
+        token.value = null;
+        user.value = null;
+        localStorage.removeItem('auth_token');
+        error.value = null;
+      };
+      authLogout();
     }
     return Promise.reject(error);
   }
@@ -101,7 +107,7 @@ export function useAuth() {
     error.value = null;
 
     try {
-      const response = await api.get<User>('/auth/me');
+      const response = await api.get<User>('/api/v1/auth/me');
       user.value = response.data;
       return true;
     } catch (err: any) {
@@ -120,7 +126,7 @@ export function useAuth() {
     error.value = null;
 
     try {
-      const response = await api.get<TokenUsageStats>('/auth/stats');
+      const response = await api.get<TokenUsageStats>('/api/v1/auth/stats');
       return response.data;
     } catch (err: any) {
       error.value = err.response?.data?.detail || 'Failed to fetch stats';

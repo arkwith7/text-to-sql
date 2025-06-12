@@ -352,6 +352,118 @@ class AnalyticsService:
             logger.error(f"Error getting user analytics: {str(e)}")
             raise
     
+    async def get_user_stats(self, user_id: str) -> Dict[str, Any]:
+        """Get comprehensive user statistics including token usage."""
+        try:
+            # Get basic query statistics
+            stats_query = """
+            SELECT 
+                COUNT(*) as total_queries,
+                SUM(CASE WHEN success THEN 1 ELSE 0 END) as successful_queries,
+                AVG(execution_time) as avg_execution_time,
+                SUM(row_count) as total_rows_processed,
+                MAX(timestamp) as last_query_at
+            FROM query_analytics WHERE user_id = :user_id
+            """
+            
+            result = await self.db_manager.execute_query_safe(
+                stats_query,
+                params={"user_id": user_id},
+                database_type="app"
+            )
+            
+            if not result['success'] or not result['data']:
+                return {
+                    "total_queries": 0,
+                    "total_tokens": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "last_query_at": None,
+                    "daily_usage": {},
+                    "monthly_usage": {},
+                    "average_tokens_per_query": 0
+                }
+            
+            stats = result['data'][0]
+            
+            # Get token usage from events table (if exists)
+            token_query = """
+            SELECT 
+                COALESCE(SUM(CAST(JSON_EXTRACT(data, '$.tokens_used') AS INTEGER)), 0) as total_tokens,
+                COALESCE(SUM(CAST(JSON_EXTRACT(data, '$.input_tokens') AS INTEGER)), 0) as input_tokens,
+                COALESCE(SUM(CAST(JSON_EXTRACT(data, '$.output_tokens') AS INTEGER)), 0) as output_tokens
+            FROM events 
+            WHERE user_id = :user_id AND type = 'query_executed'
+            """
+            
+            token_result = await self.db_manager.execute_query_safe(
+                token_query,
+                params={"user_id": user_id},
+                database_type="app"
+            )
+            
+            token_stats = {"total_tokens": 0, "input_tokens": 0, "output_tokens": 0}
+            if token_result['success'] and token_result['data']:
+                token_stats = token_result['data'][0]
+            
+            # Get daily usage for the last 30 days
+            daily_usage_query = """
+            SELECT 
+                DATE(timestamp) as date,
+                COUNT(*) as queries,
+                COALESCE(SUM(CAST(JSON_EXTRACT(e.data, '$.tokens_used') AS INTEGER)), 0) as tokens
+            FROM query_analytics qa
+            LEFT JOIN events e ON qa.user_id = e.user_id AND DATE(qa.timestamp) = DATE(e.timestamp)
+            WHERE qa.user_id = :user_id 
+            AND qa.timestamp >= DATE('now', '-30 days')
+            GROUP BY DATE(qa.timestamp)
+            ORDER BY DATE(qa.timestamp)
+            """
+            
+            daily_result = await self.db_manager.execute_query_safe(
+                daily_usage_query,
+                params={"user_id": user_id},
+                database_type="app"
+            )
+            
+            daily_usage = {}
+            if daily_result['success'] and daily_result['data']:
+                for row in daily_result['data']:
+                    daily_usage[row['date']] = {
+                        'queries': row['queries'],
+                        'tokens': row['tokens'] or 0
+                    }
+            
+            # Calculate average tokens per query
+            total_queries = stats.get('total_queries', 0)
+            total_tokens = token_stats.get('total_tokens', 0)
+            avg_tokens = total_tokens / total_queries if total_queries > 0 else 0
+            
+            return {
+                "total_queries": stats.get('total_queries', 0),
+                "total_tokens": token_stats.get('total_tokens', 0),
+                "input_tokens": token_stats.get('input_tokens', 0),
+                "output_tokens": token_stats.get('output_tokens', 0),
+                "last_query_at": stats.get('last_query_at'),
+                "daily_usage": daily_usage,
+                "monthly_usage": {},  # Could implement monthly aggregation if needed
+                "average_tokens_per_query": round(avg_tokens, 2)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting user stats: {str(e)}")
+            # Return default stats on error
+            return {
+                "total_queries": 0,
+                "total_tokens": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "last_query_at": None,
+                "daily_usage": {},
+                "monthly_usage": {},
+                "average_tokens_per_query": 0
+            }
+    
     async def get_system_metrics(self) -> SystemMetrics:
         """Get overall system metrics."""
         try:

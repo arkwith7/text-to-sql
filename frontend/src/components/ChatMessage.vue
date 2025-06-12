@@ -155,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { 
   AlertCircle, 
   Copy, 
@@ -178,6 +178,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   saveQuery: [queryData: any];
+  scrollToBottom: [];
 }>();
 
 const selectedView = ref('table');
@@ -209,8 +210,13 @@ const saveQuery = () => {
   }
 };
 
-const showMore = () => {
+const showMore = async () => {
   displayLimit.value += 10;
+  // Allow some time for DOM to update then scroll to maintain position
+  await nextTick();
+  setTimeout(() => {
+    emit('scrollToBottom');
+  }, 50);
 };
 
 const formatValue = (value: any): string => {

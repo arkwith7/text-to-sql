@@ -66,5 +66,10 @@ export interface TokenUsageStats {
   user_id: string;
   total_queries: number;
   total_tokens: number;
+  input_tokens?: number;
+  output_tokens?: number;
   last_query_at?: string;
+  daily_usage?: Record<string, number>;
+  monthly_usage?: Record<string, number>;
+  average_tokens_per_query?: number;
 }
