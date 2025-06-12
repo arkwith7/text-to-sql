@@ -37,13 +37,7 @@ cd /home/wjadmin/Dev/text-to-sql
 
 ### 2. Configure Environment
 
-Copy the example environment file and update with your Azure OpenAI credentials:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` file:
+Create a `.env` file and add your Azure OpenAI credentials:
 ```env
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
 AZURE_OPENAI_API_KEY=your-api-key-here
@@ -51,26 +45,11 @@ AZURE_OPENAI_API_VERSION=2024-02-15-preview
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o-mini
 ```
 
-### 3. Start the Application (Recommended)
-
-**The smart way - handles all PostgreSQL scenarios automatically:**
+### 3. Start the Application
 
 ```bash
-# This script intelligently handles:
-# - Running PostgreSQL containers
-# - Stopped PostgreSQL containers  
-# - Missing PostgreSQL containers
+# This script intelligently handles all PostgreSQL scenarios
 ./start-existing-db.sh
-```
-
-**Alternative methods:**
-
-```bash
-# Fresh installation (stops existing containers)
-./start-fresh.sh
-
-# Original Docker Compose method
-docker-compose up --build
 ```
 
 ### 4. Access the Application
@@ -95,85 +74,37 @@ Try these natural language queries:
 
 ## 🛠️ Development
 
-### Smart Scripts
+### Development Mode
 
-The project includes intelligent scripts that handle different scenarios:
+For active development with hot-reloading:
 
-#### Main Application Scripts
-
-```bash
-# Recommended: Smart PostgreSQL handling
-./start-existing-db.sh
-# - Detects existing PostgreSQL containers
-# - Starts stopped containers automatically  
-# - Creates new container if none exists
-# - Preserves existing data
-
-# Fresh installation (clean slate)
-./start-fresh.sh
-# - Stops all existing containers
-# - Creates everything from scratch
-# - Loads fresh Northwind data
-
-# Legacy method
-./start.sh
-# - Original script (less intelligent)
-```
-
-#### Development Mode (Recommended for coding)
-
-**Step 1: Setup development environment**
-```bash
-./dev-setup.sh
-# - Prepares database and environment
-# - Shows status and next steps
-```
-
-**Step 2: Start backend (Terminal 1)**
+**1. Backend (Terminal 1)**
 ```bash
 ./dev-backend.sh
-# - Creates Python virtual environment
-# - Installs dependencies automatically
-# - Runs FastAPI with auto-reload
-# - Available at http://localhost:8000
 ```
 
-**Step 3: Start frontend (Terminal 2)**  
+**2. Frontend (Terminal 2)**
 ```bash
-./dev-frontend.sh
-# - Installs Node.js dependencies
-# - Runs Vue.js with hot reload
-# - Available at http://localhost:3000
+cd frontend
+npm run dev
 ```
 
-**Benefits of development mode:**
-- ✅ Real-time code changes (auto-reload/hot-reload)
-- ✅ Direct debugging with IDE breakpoints
-- ✅ Better error messages and logging
-- ✅ Independent restart of backend/frontend
-- ✅ No container rebuild needed for code changes
+> The backend runs on `http://localhost:8000` and the frontend on `http://localhost:3000`.
 
-#### Database Management Helper
+### Database Management
 
+Use the helper script to manage the PostgreSQL container:
 ```bash
-# Check PostgreSQL container status
+# Check status
 ./db-helper.sh status
 
-# Start/stop container
+# Start/stop
 ./db-helper.sh start
 ./db-helper.sh stop
 
-# Create new container with Northwind data
+# Create or remove the database
 ./db-helper.sh create
-
-# Remove container completely
 ./db-helper.sh remove
-
-# View container logs
-./db-helper.sh logs
-
-# Help information
-./db-helper.sh help
 ```
 
 ### Local Development (without Docker)
@@ -183,7 +114,7 @@ The project includes intelligent scripts that handle different scenarios:
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 #### Frontend
@@ -234,31 +165,30 @@ The application uses the **Northwind** database with these main tables:
 text-to-sql/
 ├── README.md                 # This file
 ├── docker-compose.yml        # Container orchestration
-├── .env.example             # Environment template
 ├── .gitignore              # Git ignore rules
 │
 ├── 🚀 Startup Scripts
 ├── start-existing-db.sh     # Smart PostgreSQL handling (Recommended)
-├── start-fresh.sh          # Fresh installation
-├── start.sh               # Legacy startup script  
+├── dev-backend.sh           # Backend development server
 ├── db-helper.sh           # Database management helper
 │
 ├── 🔧 Backend (FastAPI)
 ├── backend/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── main.py            # Main API application
+│   ├── alembic/           # Database migrations
+│   ├── main.py            # Main API application
+│   ├── models.py          # Database models
+│   ├── services.py        # Business logic
+│   └── requirements.txt
 │
 ├── 🎨 Frontend (Vue.js)
 ├── frontend/
-│   ├── Dockerfile
 │   ├── package.json
 │   ├── vite.config.ts
+│   ├── tailwind.config.js
 │   └── src/
-│       ├── components/    # Reusable components
-│       ├── composables/   # Vue composables
-│       ├── types/        # TypeScript types
-│       └── views/        # Page components
+│       ├── main.ts        # Entry point
+│       ├── App.vue        # Root component
+│       └── ...
 │
 └── 🗄️ Database
     └── postgre/
@@ -392,7 +322,6 @@ docker exec -it northwind-postgres psql -U postgres -d northwind
 
 ### For Demos
 
-- Use `./start-fresh.sh` for clean demonstrations
 - Sample questions are built into the frontend
 - API documentation is available at `/docs` endpoint
 

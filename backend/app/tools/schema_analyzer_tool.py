@@ -61,7 +61,18 @@ class SchemaAnalyzerTool(BaseTool):
     
     async def _arun(self, table_name: str = "") -> str:
         """Async version of schema analysis."""
-        return self._run(table_name)
+        try:
+            if table_name.strip():
+                return await self._analyze_specific_table(table_name.strip())
+            else:
+                return await self._analyze_full_schema()
+                
+        except Exception as e:
+            logger.error(f"Error analyzing schema asynchronously: {str(e)}")
+            return json.dumps({
+                "error": f"Failed to analyze schema: {str(e)}",
+                "tables": []
+            })
     
     async def _analyze_full_schema(self) -> str:
         """Analyze the complete database schema."""

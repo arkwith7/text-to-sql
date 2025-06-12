@@ -170,7 +170,7 @@ async def get_schema(
         raise HTTPException(status_code=503, detail="Schema analyzer tool not found in agent")
     
     try:
-        schema_json_str = schema_analyzer._run() 
+        schema_json_str = await schema_analyzer._arun()
         schema_data = json.loads(schema_json_str)
         
         return SchemaResponse(
