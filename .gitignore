@@ -21,6 +21,7 @@ backend/venv/
 
 # Database
 postgres_data/
+app_data.db
 
 # IDE
 .vscode/

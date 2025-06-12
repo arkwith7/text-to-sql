@@ -45,19 +45,11 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   const { isAuthenticated } = useAuth();
   
-  // 인증이 필요한 페이지에 비로그인 사용자가 접근하는 경우
   if (to.meta.requiresAuth && !isAuthenticated.value) {
     next('/login');
-  } 
-  // 게스트 전용 페이지에 로그인 사용자가 접근하는 경우
-  else if (to.meta.requiresGuest && isAuthenticated.value) {
+  } else if (to.meta.requiresGuest && isAuthenticated.value) {
     next('/home');
-  }
-  // 루트 경로에 로그인한 사용자가 접근하는 경우 홈으로 리다이렉트
-  else if (to.path === '/' && isAuthenticated.value) {
-    next('/home');
-  }
-  else {
+  } else {
     next();
   }
 });
