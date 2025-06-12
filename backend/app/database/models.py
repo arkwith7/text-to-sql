@@ -235,3 +235,53 @@ class SystemConfig(Base):
     
     def __repr__(self):
         return f"<SystemConfig(key='{self.config_key}', sensitive='{self.is_sensitive}')>"
+
+
+class ChatSession(Base):
+    """Chat session model for managing conversation sessions."""
+    
+    __tablename__ = "chat_sessions"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(255), nullable=True)  # Optional session title
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    last_message_at = Column(DateTime(timezone=True), nullable=True)
+    message_count = Column(Integer, default=0, nullable=False)
+    
+    # Relationships
+    user = relationship("User")
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<ChatSession(id='{self.id}', user_id='{self.user_id}', active='{self.is_active}')>"
+
+
+class ChatMessage(Base):
+    """Chat message model for storing individual messages in conversations."""
+    
+    __tablename__ = "chat_messages"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String(36), ForeignKey("chat_sessions.id"), nullable=False, index=True)
+    message_type = Column(String(20), nullable=False)  # 'user' or 'assistant'
+    content = Column(Text, nullable=False)
+    
+    # Query-related fields (for assistant messages)
+    query_id = Column(String(36), nullable=True)  # Link to query analytics
+    sql_query = Column(Text, nullable=True)
+    query_result = Column(JSON, nullable=True)  # Store query results as JSON
+    execution_time = Column(Float, nullable=True)
+    error_message = Column(Text, nullable=True)
+    
+    # Metadata
+    timestamp = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
+    sequence_number = Column(Integer, nullable=False)  # Order within session
+    
+    # Relationships
+    session = relationship("ChatSession", back_populates="messages")
+    
+    def __repr__(self):
+        return f"<ChatMessage(id='{self.id}', type='{self.message_type}', session_id='{self.session_id}')>"

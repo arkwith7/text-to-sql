@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     
     # Model configuration for Pydantic V2
     model_config = SettingsConfigDict(
-        env_file="../.env",
+        env_file="../../.env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra='ignore'
@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", description="Application environment", alias="ENVIRONMENT")
     debug: bool = Field(default=True, description="Debug mode")
     log_level: str = Field(default="INFO", description="Logging level")
+    server_host: str = Field(default="0.0.0.0", description="Server host", alias="SERVER_HOST")
+    server_port: int = Field(default=8001, description="Server port", alias="SERVER_PORT")
     
     # Performance Configuration
     max_query_timeout: int = Field(default=30, description="Maximum query timeout in seconds")

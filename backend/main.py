@@ -33,6 +33,7 @@ from app.agents.sql_agent import SQLAgent
 from app.auth.service import AuthService
 from app.auth.security import get_openapi_security_schemes
 from app.analytics.service import AnalyticsService
+from app.chat.service import ChatSessionService
 from app.utils.cache import cache
 from app.api.v1.api import api_router
 
@@ -62,6 +63,9 @@ async def lifespan(app: FastAPI):
         
         analytics_service = AnalyticsService(db_manager)
         app.state.analytics_service = analytics_service
+
+        # Initialize chat session service
+        app.state.chat_service = ChatSessionService(db_manager)
 
         app.state.sql_agent = SQLAgent(db_manager)
         app.state.cache = cache
@@ -104,6 +108,10 @@ app = FastAPI(
         {
             "name": "Analytics",
             "description": "Usage analytics and system metrics"
+        },
+        {
+            "name": "Chat",
+            "description": "Chat session management and conversation history"
         },
         {
             "name": "Admin",
@@ -216,7 +224,8 @@ async def health_check(request: Request):
             "services": {
                 "sql_agent": hasattr(request.app.state, 'sql_agent'),
                 "auth_service": hasattr(request.app.state, 'auth_service'),
-                "analytics_service": hasattr(request.app.state, 'analytics_service')
+                "analytics_service": hasattr(request.app.state, 'analytics_service'),
+                "chat_service": hasattr(request.app.state, 'chat_service')
             }
         }
     except Exception as e:
