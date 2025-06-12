@@ -13,7 +13,9 @@ frontend/.vite/
 
 # Backend
 backend/__pycache__/
-backend/*.pyc
+backend/**/*.pyc
+backend/**/*.pyo
+backend/**/*.pyd
 backend/.pytest_cache/
 backend/venv/
 
