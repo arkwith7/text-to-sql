@@ -26,6 +26,9 @@ from core.config import get_settings
 from database.connection_manager import DatabaseManager
 from services.analytics_service import AnalyticsService, EventType
 
+# 파일 상단에 추가할 import
+from utils.logging_config import AuthLogger
+
 logger = logging.getLogger(__name__)
 
 class UserRole(str, Enum):
@@ -96,7 +99,13 @@ class AuthService:
         
         # Security headers
         self.security = HTTPBearer()
-    
+
+        # 로거 설정
+        self.logger = logging.getLogger(__name__)
+        self.auth_logger = logging.getLogger("authentication")
+        
+        self.logger.info("인증 서비스 초기화 완료")
+
     def hash_password(self, password: str) -> str:
         """Hash a password using bcrypt."""
         return self.pwd_context.hash(password)
@@ -215,7 +224,7 @@ class AuthService:
         return False
     
     def _record_failed_attempt(self, email: str):
-        """Record a failed login attempt."""
+        """Record failed login attempt with logging."""
         now = datetime.now(timezone.utc)
         if email in self.failed_login_attempts:
             self.failed_login_attempts[email]["count"] += 1
@@ -225,11 +234,26 @@ class AuthService:
                 "count": 1,
                 "last_attempt": now
             }
+        
+        self.logger.warning(
+            f"🔒 로그인 실패 기록 - Email: {email}, 실패 횟수: {self.failed_login_attempts[email]['count']}",
+            extra={
+                'email': email,
+                'failed_attempt_count': self.failed_login_attempts[email]['count'],
+                'max_attempts': self.max_failed_attempts
+            }
+        )
     
     def _clear_failed_attempts(self, email: str):
-        """Clear failed login attempts for email."""
+        """Clear failed login attempts with logging."""
         if email in self.failed_login_attempts:
+            failed_count = self.failed_login_attempts[email]["count"]
             del self.failed_login_attempts[email]
+            
+            self.logger.info(
+                f"🔓 로그인 실패 기록 초기화 - Email: {email}, 이전 실패 횟수: {failed_count}",
+                extra={'email': email, 'cleared_failed_attempts': failed_count}
+            )
     
     async def _update_last_login(self, user_id: str):
         """Update last login timestamp for user."""
@@ -276,34 +300,58 @@ class AuthService:
             logger.warning("Password should contain at least one special character")
 
     async def create_user(self, user_data: UserCreate, analytics_service: AnalyticsService) -> Dict[str, Any]:
-        """Register a new user."""
+        """Register a new user with comprehensive logging."""
+        self.logger.info(
+            f"👤 새 사용자 등록 시작 - Email: {user_data.email}",
+            extra={
+                'email': user_data.email,
+                'full_name': user_data.full_name,
+                'company': user_data.company,
+                'role': user_data.role.value
+            }
+        )
+        
         try:
-            # Check if user already exists
+            # 중복 사용자 확인
             existing_user = await self.get_user_by_email(user_data.email)
             if existing_user:
+                self.logger.warning(
+                    f"⚠️ 사용자 등록 실패 - 이미 존재하는 이메일: {user_data.email}",
+                    extra={'email': user_data.email, 'reason': 'duplicate_email'}
+                )
+                
+                # 인증 로그
+                AuthLogger.log_auth_event(
+                    event_type="registration_failed",
+                    email=user_data.email,
+                    success=False,
+                    error_message="User with this email already exists"
+                )
+                
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="User with this email already exists"
                 )
             
-            # Validate password strength
+            # 비밀번호 강도 검증
+            self.logger.debug(f"🔒 비밀번호 강도 검증 중")
             self._validate_password_strength(user_data.password)
             
-            # Hash password
+            # 비밀번호 해싱
             hashed_password = self.hash_password(user_data.password)
-            
-            # Create user ID
             user_id = str(uuid.uuid4())
             
-            # Insert user into database
+            self.logger.debug(
+                f"🔐 사용자 데이터 준비 완료 - ID: {user_id}",
+                extra={'user_id': user_id, 'email': user_data.email}
+            )
+            
+            # 데이터베이스에 사용자 삽입
             query = """
                 INSERT INTO users (id, email, password_hash, full_name, company, role, is_active, created_at, updated_at, token_usage)
                 VALUES (:id, :email, :password_hash, :full_name, :company, :role, TRUE, :created_at, :updated_at, :token_usage)
             """
             now = datetime.now(timezone.utc)
-            
-            # The RETURNING clause is not universally supported, especially in older SQLite versions.
-            # We will perform a SELECT after INSERT.
             
             insert_params = {
                 "id": user_id,
@@ -317,23 +365,25 @@ class AuthService:
                 "token_usage": 0,
             }
 
-            result = await self.db_manager.execute_query(
-                "app",
-                query,
-                insert_params,
-            )
+            result = await self.db_manager.execute_query("app", query, insert_params)
             
             if not result.get("success"):
+                error_msg = result.get("error", "Unknown database error")
+                self.logger.error(
+                    f"❌ 사용자 등록 DB 오류: {error_msg}",
+                    extra={'user_id': user_id, 'email': user_data.email, 'error_details': error_msg}
+                )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to create user."
                 )
 
-            # Fetch the newly created user
+            # 새로 생성된 사용자 조회
             select_query = "SELECT id, email, full_name, company, role, is_active, created_at, last_login, token_usage FROM users WHERE id = :user_id"
             fetch_result = await self.db_manager.execute_query("app", select_query, {"user_id": user_id})
 
             if not fetch_result.get("success") or not fetch_result.get("data"):
+                self.logger.error(f"❌ 새 사용자 조회 실패 - ID: {user_id}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to fetch newly created user."
@@ -341,86 +391,212 @@ class AuthService:
             
             new_user = dict(fetch_result["data"][0])
             
-            # Log registration
-            await self._log_auth_event(
-                analytics_service, new_user['id'], EventType.USER_REGISTERED, new_user['email']
+            # 성공 로깅
+            self.logger.info(
+                f"✅ 사용자 등록 성공 - ID: {user_id}, Email: {user_data.email}",
+                extra={
+                    'user_id': user_id,
+                    'email': user_data.email,
+                    'full_name': user_data.full_name,
+                    'role': user_data.role.value,
+                    'company': user_data.company
+                }
             )
+            
+            # 인증 로그
+            AuthLogger.log_auth_event(
+                event_type="registration_success",
+                user_id=user_id,
+                email=user_data.email,
+                success=True
+            )
+            
+            # 분석 로깅
+            await self._log_auth_event(analytics_service, new_user['id'], EventType.USER_REGISTERED, new_user['email'])
             
             return new_user
             
         except HTTPException:
             raise
         except ValueError as e:
-            # Handle password validation errors specifically
+            self.logger.warning(
+                f"⚠️ 비밀번호 검증 실패 - Email: {user_data.email}, 오류: {str(e)}",
+                extra={'email': user_data.email, 'validation_error': str(e)}
+            )
+            
+            AuthLogger.log_auth_event(
+                event_type="registration_failed",
+                email=user_data.email,
+                success=False,
+                error_message=str(e)
+            )
+            
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e)
             )
         except Exception as e:
-            logger.error(f"Error registering user: {str(e)}")
+            self.logger.error(
+                f"❌ 사용자 등록 실패 - Email: {user_data.email}, 오류: {str(e)}",
+                extra={'email': user_data.email, 'error_details': str(e)},
+                exc_info=True
+            )
+            
+            AuthLogger.log_auth_event(
+                event_type="registration_failed",
+                email=user_data.email,
+                success=False,
+                error_message=str(e)
+            )
+            
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to register user"
             )
     
+    
     async def authenticate_user(
-        self, login_data: UserLogin, analytics_service: AnalyticsService
+        self, login_data: UserLogin, analytics_service: AnalyticsService, 
+        ip_address: str = None, user_agent: str = None
     ) -> Dict[str, Any]:
-        """Authenticate a user and return user data."""
+        """Authenticate a user with comprehensive logging."""
+        self.logger.info(
+            f"🔐 사용자 로그인 시도 - Email: {login_data.email}",
+            extra={'email': login_data.email, 'login_attempt': True}
+        )
+        
         try:
-            # Check rate limiting
+            # 계정 잠금 확인
             if self._is_locked_out(login_data.email):
+                self.logger.warning(
+                    f"🔒 계정 잠금됨 - Email: {login_data.email}",
+                    extra={'email': login_data.email, 'reason': 'too_many_failed_attempts'}
+                )
+                
+                AuthLogger.log_auth_event(
+                    event_type="login_blocked",
+                    email=login_data.email,
+                    success=False,
+                    error_message="Account locked due to too many failed attempts"
+                )
+                
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Too many failed login attempts. Please try again later."
                 )
             
-            # Get user by email
+            # 사용자 조회
             user = await self.get_user_by_email(login_data.email)
             if not user:
+                self.logger.warning(
+                    f"⚠️ 존재하지 않는 사용자 - Email: {login_data.email}",
+                    extra={'email': login_data.email, 'reason': 'user_not_found'}
+                )
+                
                 self._record_failed_attempt(login_data.email)
+                
+                AuthLogger.log_auth_event(
+                    event_type="login_failed",
+                    email=login_data.email,
+                    success=False,
+                    error_message="User not found"
+                )
+                
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid email or password"
                 )
             
-            # Verify password
+            # 비밀번호 검증
             if not self.verify_password(login_data.password, user["password_hash"]):
+                self.logger.warning(
+                    f"🔑 비밀번호 불일치 - Email: {login_data.email}",
+                    extra={'email': login_data.email, 'user_id': user['id'], 'reason': 'invalid_password'}
+                )
+                
                 self._record_failed_attempt(login_data.email)
+                
+                AuthLogger.log_auth_event(
+                    event_type="login_failed",
+                    user_id=user['id'],
+                    email=login_data.email,
+                    success=False,
+                    error_message="Invalid password"
+                )
+                
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid email or password"
                 )
             
-            # Check if user is active
+            # 계정 활성화 확인
             if not user["is_active"]:
+                self.logger.warning(
+                    f"🚫 비활성화된 계정 - Email: {login_data.email}, User ID: {user['id']}",
+                    extra={'email': login_data.email, 'user_id': user['id'], 'reason': 'account_disabled'}
+                )
+                
+                AuthLogger.log_auth_event(
+                    event_type="login_failed",
+                    user_id=user['id'],
+                    email=login_data.email,
+                    success=False,
+                    error_message="Account is disabled"
+                )
+                
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Account is disabled"
                 )
             
-            # Reset failed login attempts
+            # 로그인 성공 처리
             self._clear_failed_attempts(login_data.email)
-            
-            # Update last login time
             await self._update_last_login(user["id"])
             
-            # Log successful login
-            await self._log_auth_event(
-                analytics_service, user["id"], EventType.USER_LOGGED_IN, login_data.email
+            self.logger.info(
+                f"✅ 로그인 성공 - Email: {login_data.email}, User ID: {user['id']}",
+                extra={
+                    'email': login_data.email,
+                    'user_id': user['id'],
+                    'role': user['role'],
+                    'last_login_updated': True
+                }
             )
+            
+            # 인증 로그
+            AuthLogger.log_auth_event(
+                event_type="login_success",
+                user_id=user['id'],
+                email=login_data.email,
+                success=True
+            )
+            
+            # 분석 로깅
+            await self._log_auth_event(analytics_service, user["id"], EventType.USER_LOGGED_IN, login_data.email)
 
             return user
         
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error authenticating user: {str(e)}")
+            self.logger.error(
+                f"❌ 로그인 처리 오류 - Email: {login_data.email}, 오류: {str(e)}",
+                extra={'email': login_data.email, 'error_details': str(e)},
+                exc_info=True
+            )
+            
+            AuthLogger.log_auth_event(
+                event_type="login_error",
+                email=login_data.email,
+                success=False,
+                error_message=str(e)
+            )
+            
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Authentication failed"
             )
-    
+     
     async def create_token(self, user_id: str) -> TokenResponse:
         """Create access and refresh tokens for a user."""
         user = await self.get_user_by_id(user_id)
@@ -495,13 +671,15 @@ class AuthService:
             )
     
     async def get_current_user(self, request: Request, required: bool = True) -> Optional[Dict[str, Any]]:
-        """Get the current authenticated user from request."""
+        """Get current authenticated user with enhanced logging."""
+        request_id = getattr(request.state, 'request_id', 'unknown')
+        
         try:
-            # Get authorization header
+            # 인증 헤더 확인
             authorization = request.headers.get("authorization")
             if not authorization:
-                logger.debug("No authorization header found")
                 if required:
+                    self.logger.debug(f"🔍 인증 헤더 없음 - Request ID: {request_id}")
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Authorization header missing",
@@ -509,12 +687,12 @@ class AuthService:
                     )
                 return None
             
-            # Extract token
+            # 토큰 추출
             try:
                 scheme, token = authorization.split()
             except ValueError:
-                logger.debug("Invalid authorization header format")
                 if required:
+                    self.logger.debug(f"🔍 잘못된 인증 헤더 형식 - Request ID: {request_id}")
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Invalid authorization header format",
@@ -523,8 +701,8 @@ class AuthService:
                 return None
                 
             if scheme.lower() != "bearer":
-                logger.debug(f"Invalid authentication scheme: {scheme}")
                 if required:
+                    self.logger.debug(f"🔍 잘못된 인증 스키마: {scheme} - Request ID: {request_id}")
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Invalid authentication scheme",
@@ -532,25 +710,25 @@ class AuthService:
                     )
                 return None
             
-            # Verify token
-            logger.debug(f"Verifying token: {token[:20]}...")
+            # 토큰 검증
+            self.logger.debug(f"🔑 토큰 검증 중 - Request ID: {request_id}, Token: {token[:20]}...")
             payload = self.verify_token(token, TokenType.ACCESS)
             user_id = payload.get("sub")
             
             if not user_id:
-                logger.debug("No user ID in token payload")
                 if required:
+                    self.logger.debug(f"🔍 토큰에 사용자 ID 없음 - Request ID: {request_id}")
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Invalid token payload"
                     )
                 return None
             
-            # Get user from database
+            # 사용자 조회
             user = await self.get_user_by_id(user_id)
             if not user:
-                logger.debug(f"User not found: {user_id}")
                 if required:
+                    self.logger.warning(f"⚠️ 사용자 찾을 수 없음 - User ID: {user_id}, Request ID: {request_id}")
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="User not found"
@@ -558,27 +736,42 @@ class AuthService:
                 return None
             
             if not user.get("is_active"):
-                logger.debug(f"User account disabled: {user_id}")
                 if required:
+                    self.logger.warning(f"🚫 비활성화된 계정 - User ID: {user_id}, Request ID: {request_id}")
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="User account is disabled"
                     )
                 return None
             
-            logger.debug(f"Authentication successful for user: {user['email']}")
+            self.logger.debug(
+                f"✅ 인증 성공 - User: {user['email']}, Request ID: {request_id}",
+                extra={
+                    'user_id': user['id'],
+                    'email': user['email'],
+                    'role': user['role'],
+                    'request_id': request_id
+                }
+            )
+            
             return user
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error getting current user: {str(e)}")
+            self.logger.error(
+                f"❌ 사용자 인증 오류 - Request ID: {request_id}, 오류: {str(e)}",
+                extra={'request_id': request_id, 'error_details': str(e)},
+                exc_info=True
+            )
+            
             if required:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Authentication failed"
                 )
             return None
+    
     
     async def logout(self, refresh_token: str):
         """Logout user by invalidating refresh token."""

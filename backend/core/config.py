@@ -4,7 +4,7 @@ Handles environment variables and application settings
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
-from typing import Optional
+from typing import Optional, List
 import os
 
 
@@ -40,8 +40,8 @@ class Settings(BaseSettings):
         alias="DATABASE_URL"
     )
     app_database_url: str = Field(
-        default="sqlite:///../app_data.db", 
-        description="Application database URL for user data (SQLite)",
+        default="sqlite:///./app_data.db", 
+        description="Application database URL for user data (SQLite) - relative to main.py execution directory",
         alias="APP_DATABASE_URL"
     )
     northwind_database_url: str = Field(
@@ -121,6 +121,52 @@ class Settings(BaseSettings):
     enable_api_keys: bool = Field(default=True, description="Enable API key authentication")
     password_min_length: int = Field(default=8, description="Minimum password length")
 
+    # Logging Configuration
+    log_level: str = Field(default="INFO", description="Logging level", alias="LOG_LEVEL")
+    log_to_file: bool = Field(default=True, description="Enable file logging", alias="LOG_TO_FILE")
+    log_file_max_size_mb: int = Field(default=10, description="Log file max size in MB", alias="LOG_FILE_MAX_SIZE_MB")
+    log_file_backup_count: int = Field(default=5, description="Number of log file backups", alias="LOG_FILE_BACKUP_COUNT")
+    log_format: str = Field(
+        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        description="Log format string",
+        alias="LOG_FORMAT"
+    )
+    
+    # Structured Logging
+    enable_json_logging: bool = Field(default=True, description="Enable JSON structured logging", alias="ENABLE_JSON_LOGGING")
+    log_sql_queries: bool = Field(default=True, description="Log SQL queries", alias="LOG_SQL_QUERIES")
+    log_api_requests: bool = Field(default=True, description="Log API requests", alias="LOG_API_REQUESTS")
+    log_chat_messages: bool = Field(default=True, description="Log chat messages", alias="LOG_CHAT_MESSAGES")
+    log_auth_events: bool = Field(default=True, description="Log authentication events", alias="LOG_AUTH_EVENTS")
+    
+    # Log Retention
+    log_retention_days: int = Field(default=30, description="Log retention period in days", alias="LOG_RETENTION_DAYS")
+    enable_log_compression: bool = Field(default=True, description="Compress old log files", alias="ENABLE_LOG_COMPRESSION")
+    
+    # Debug Logging
+    debug_sql_queries: bool = Field(default=False, description="Enable debug level SQL query logging", alias="DEBUG_SQL_QUERIES")
+    debug_api_requests: bool = Field(default=False, description="Enable debug level API request logging", alias="DEBUG_API_REQUESTS")
+    log_request_body: bool = Field(default=True, description="Log request body (with masking)", alias="LOG_REQUEST_BODY")
+    log_response_body: bool = Field(default=False, description="Log response body", alias="LOG_RESPONSE_BODY")
+    
+    # Performance Logging
+    log_slow_queries: bool = Field(default=True, description="Log slow queries", alias="LOG_SLOW_QUERIES")
+    slow_query_threshold_seconds: float = Field(default=1.0, description="Slow query threshold in seconds", alias="SLOW_QUERY_THRESHOLD_SECONDS")
+    log_performance_metrics: bool = Field(default=True, description="Log performance metrics", alias="LOG_PERFORMANCE_METRICS")
+    
+    # Error Logging
+    log_stack_traces: bool = Field(default=True, description="Include stack traces in error logs", alias="LOG_STACK_TRACES")
+    enable_error_alerting: bool = Field(default=False, description="Enable error alerting", alias="ENABLE_ERROR_ALERTING")
+    error_alert_webhook_url: Optional[str] = Field(default=None, description="Webhook URL for error alerts", alias="ERROR_ALERT_WEBHOOK_URL")
+    
+    # Log Filtering
+    exclude_health_check_logs: bool = Field(default=True, description="Exclude health check from logs", alias="EXCLUDE_HEALTH_CHECK_LOGS")
+    exclude_static_file_logs: bool = Field(default=True, description="Exclude static file requests from logs", alias="EXCLUDE_STATIC_FILE_LOGS")
+    sensitive_data_patterns: List[str] = Field(
+        default=["password", "token", "secret", "key", "auth", "credential"],
+        description="Patterns to mask in logs",
+        alias="SENSITIVE_DATA_PATTERNS"
+    )
 
 # Global settings instance
 settings = Settings()

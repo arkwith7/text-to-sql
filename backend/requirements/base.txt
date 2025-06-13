@@ -50,5 +50,8 @@ mypy==1.7.1
 click==8.1.7
 asyncio-throttle==1.0.2
 
-# Jupyter Notebook
+# Jupyter Notebook & Data Analysis
 ipykernel
+jupyter
+matplotlib
+seaborn
