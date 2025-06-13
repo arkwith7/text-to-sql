@@ -364,6 +364,9 @@ const {
   clearCurrentSession
 } = useChatSession();
 
+// Raw messages from API
+const rawMessages = ref<any[]>([]);
+
 const {
   streamQuery,
   isStreaming,
@@ -392,31 +395,42 @@ interface UIMessage {
   error?: string;
 }
 
-// Convert chat messages to UI messages
+// Convert raw messages to UI messages
 const messages = computed<UIMessage[]>(() => {
   const uiMessages: UIMessage[] = [];
   
-  chatMessages.value.forEach((msg: ApiChatMessage) => {
-    // Add user message
+  rawMessages.value.forEach((msg: any) => {
+    // Each message from the API is already separated by type
     uiMessages.push({
-      id: `${msg.message_id}-user`,
-      type: 'user',
-      content: msg.user_message,
-      timestamp: new Date(msg.timestamp)
-    });
-    
-    // Add assistant message
-    uiMessages.push({
-      id: `${msg.message_id}-assistant`,
-      type: 'assistant',
-      content: msg.ai_response,
-      timestamp: new Date(msg.timestamp),
-      queryResult: msg.query_result as QueryResponse
+      id: msg.id,
+      type: msg.message_type as 'user' | 'assistant',
+      content: msg.content,
+      timestamp: new Date(msg.created_at),
+      queryResult: msg.query_results ? {
+        sql_query: msg.sql_query,
+        data: msg.query_results,
+        columns: msg.query_results && msg.query_results.length > 0 ? Object.keys(msg.query_results[0]) : [],
+        execution_time: 0, // Not available in message structure
+        row_count: Array.isArray(msg.query_results) ? msg.query_results.length : 0
+      } : undefined
     });
   });
   
   return uiMessages;
 });
+
+// Load messages for current session
+const loadSessionMessages = async (sessionId: string) => {
+  try {
+    const { api } = useAuth();
+    const response = await api.get(`/api/v1/chat/sessions/${sessionId}/messages`);
+    rawMessages.value = response.data;
+    console.log('Loaded messages:', response.data);
+  } catch (error) {
+    console.error('Failed to load messages:', error);
+    rawMessages.value = [];
+  }
+};
 
 const sampleQuestions = [
   "지난 3개월간 가장 많이 팔린 제품 5개는?",
@@ -441,6 +455,7 @@ const switchToSessionAndGoToChat = async (sessionId: string) => {
   const success = await switchToSession(sessionId);
   if (success) {
     activeTab.value = 'chat';
+    await loadSessionMessages(sessionId);
   }
 };
 
@@ -455,12 +470,23 @@ const sendMessage = async (content: string) => {
 
   // Ensure session exists
   if (!hasActiveSession.value) {
+    console.log('Creating new session...');
     const created = await createNewSession(`Chat - ${new Date().toLocaleString()}`);
     if (!created) {
       console.error('채팅 세션 생성 실패');
       return;
     }
+    console.log('New session created:', currentSession.value);
   }
+
+  // Verify we have a valid session ID
+  if (!currentSession.value?.session_id) {
+    console.error('세션 ID가 없습니다:', currentSession.value);
+    return;
+  }
+
+  const sessionId = currentSession.value.session_id;
+  console.log('Using session ID:', sessionId);
 
   // Clear input immediately for better UX
   currentMessage.value = '';
@@ -468,7 +494,7 @@ const sendMessage = async (content: string) => {
   // Use streaming for real-time feedback
   await streamQuery(
     content.trim(),
-    currentSession.value?.session_id,
+    sessionId,
     // onProgress callback
     (event) => {
       console.log('Streaming event:', event);
@@ -476,13 +502,11 @@ const sendMessage = async (content: string) => {
     // onComplete callback
     async (result) => {
       console.log('Query completed:', result);
+      // Reload messages for current session
+      await loadSessionMessages(sessionId);
       // Scroll to bottom after completion
       await nextTick();
       scrollToBottom(true);
-      // Refresh the current session to get the latest messages
-      if (currentSession.value) {
-        await switchToSession(currentSession.value.session_id);
-      }
     },
     // onError callback
     (error) => {
@@ -494,6 +518,7 @@ const sendMessage = async (content: string) => {
 // Start a new chat session
 const startNewChat = async () => {
   clearCurrentSession();
+  rawMessages.value = [];
   activeTab.value = 'chat';
   currentMessage.value = '';
   await nextTick();

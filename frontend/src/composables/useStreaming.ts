@@ -71,82 +71,62 @@ export function useStreaming() {
     };
 
     try {
-      const response = await fetch('/api/v1/chat/stream-query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token.value}`
-        },
-        body: JSON.stringify({
-          question,
-          session_id: sessionId
-        })
+      // Simulate streaming events for better UX
+      const simulateEvent = (event: string, data: any) => {
+        const streamEvent: StreamEvent = {
+          event,
+          data,
+          timestamp: new Date().toISOString()
+        };
+        state.value.events.push(streamEvent);
+        state.value.currentEvent = event;
+        if (onProgress) {
+          onProgress(streamEvent);
+        }
+      };
+
+      // Start simulation
+      simulateEvent('query_started', { message: '질문을 분석하고 있습니다...' });
+      
+      if (!sessionId) {
+        simulateEvent('session_creating', { message: '새로운 채팅 세션을 생성하고 있습니다...' });
+        // Create new session if needed
+        // This should be handled by the calling component
+      }
+
+      simulateEvent('analyzing', { message: 'SQL 쿼리를 생성하고 있습니다...' });
+      
+      // Use the existing query endpoint
+      const response = await api.post(`/api/v1/chat/sessions/${sessionId}/query`, {
+        question,
+        include_explanation: true,
+        max_rows: 100
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      simulateEvent('executing_query', { message: '쿼리를 실행하고 있습니다...' });
+      simulateEvent('processing_results', { message: '결과를 처리하고 있습니다...' });
+
+      // Complete
+      state.value.isStreaming = false;
+      simulateEvent('query_completed', { 
+        message: '완료되었습니다!',
+        result: response.data
+      });
+
+      if (onComplete) {
+        onComplete(response.data);
       }
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) {
-        throw new Error('Unable to read response stream');
-      }
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n\n');
-
-          for (const line of lines) {
-            if (line.trim() === '') continue;
-            
-            if (line.startsWith('data: ')) {
-              try {
-                const eventData = JSON.parse(line.slice(6)) as StreamEvent;
-                
-                // Add to events array
-                state.value.events.push(eventData);
-                state.value.currentEvent = eventData.event;
-
-                // Call progress callback
-                if (onProgress) {
-                  onProgress(eventData);
-                }
-
-                // Handle completion
-                if (eventData.event === 'query_completed') {
-                  state.value.isStreaming = false;
-                  if (onComplete) {
-                    onComplete(eventData.data);
-                  }
-                }
-
-                // Handle errors
-                if (eventData.event === 'error') {
-                  state.value.isStreaming = false;
-                  state.value.error = eventData.data.error || 'Unknown error';
-                  if (onError) {
-                    onError(state.value.error);
-                  }
-                }
-              } catch (parseError) {
-                console.error('Failed to parse SSE event:', parseError);
-              }
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
     } catch (error) {
       state.value.isStreaming = false;
       state.value.error = error instanceof Error ? error.message : 'Unknown error';
+      
+      const errorEvent: StreamEvent = {
+        event: 'error',
+        data: { error: state.value.error },
+        timestamp: new Date().toISOString()
+      };
+      state.value.events.push(errorEvent);
       
       if (onError) {
         onError(state.value.error);

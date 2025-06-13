@@ -23,8 +23,9 @@ class SQLAgent(BaseAgent):
         """Initialize SQL Agent with database manager."""
         super().__init__(db_manager)
         
-        # Simple keyword-to-SQL mapping for demonstration
+        # Simple keyword-to-SQL mapping for demonstration (English and Korean)
         self.query_patterns = {
+            # English patterns
             r'customers?\s+from\s+(\w+)': 'SELECT * FROM customers WHERE country = \'{}\' LIMIT 10',
             r'how\s+many\s+products?': 'SELECT COUNT(*) as product_count FROM products',
             r'how\s+many\s+customers?': 'SELECT COUNT(*) as customer_count FROM customers',
@@ -34,7 +35,76 @@ class SQLAgent(BaseAgent):
             r'show\s+me\s+orders?': 'SELECT order_id, customer_id, order_date FROM orders LIMIT 10',
             r'products?\s+by\s+category': 'SELECT c.category_name, COUNT(p.product_id) as product_count FROM categories c LEFT JOIN products p ON c.category_id = p.category_id GROUP BY c.category_name',
             r'top\s+(\d+)\s+customers?': 'SELECT c.customer_id, c.company_name, COUNT(o.order_id) as order_count FROM customers c LEFT JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.company_name ORDER BY order_count DESC LIMIT {}',
-            r'sales?\s+by\s+country': 'SELECT ship_country, COUNT(*) as order_count, SUM(freight) as total_freight FROM orders GROUP BY ship_country ORDER BY order_count DESC LIMIT 10'
+            r'sales?\s+by\s+country': 'SELECT ship_country, COUNT(*) as order_count, SUM(freight) as total_freight FROM orders GROUP BY ship_country ORDER BY order_count DESC LIMIT 10',
+            
+            # Korean patterns
+            r'월별\s*매출\s*추이': '''
+                SELECT 
+                    strftime('%Y-%m', o.order_date) as month,
+                    COUNT(o.order_id) as order_count,
+                    ROUND(SUM(od.unit_price * od.quantity * (1 - od.discount)), 2) as total_sales
+                FROM orders o
+                JOIN order_details od ON o.order_id = od.order_id
+                WHERE o.order_date IS NOT NULL
+                GROUP BY strftime('%Y-%m', o.order_date)
+                ORDER BY month
+            ''',
+            r'고객\s*수': 'SELECT COUNT(*) as customer_count FROM customers',
+            r'제품\s*수': 'SELECT COUNT(*) as product_count FROM products',
+            r'주문\s*수': 'SELECT COUNT(*) as order_count FROM orders',
+            r'카테고리별\s*제품': 'SELECT c.category_name, COUNT(p.product_id) as product_count FROM categories c LEFT JOIN products p ON c.category_id = p.category_id GROUP BY c.category_name',
+            r'카테고리별\s*평균\s*주문\s*금액': '''
+                SELECT 
+                    c.category_name,
+                    ROUND(AVG(od.unit_price * od.quantity * (1 - od.discount)), 2) as avg_order_amount
+                FROM categories c
+                JOIN products p ON c.category_id = p.category_id
+                JOIN order_details od ON p.product_id = od.product_id
+                GROUP BY c.category_name
+                ORDER BY avg_order_amount DESC
+            ''',
+            r'고객별\s*주문\s*횟수': '''
+                SELECT 
+                    c.customer_id,
+                    c.company_name,
+                    COUNT(o.order_id) as order_count
+                FROM customers c
+                LEFT JOIN orders o ON c.customer_id = o.customer_id
+                GROUP BY c.customer_id, c.company_name
+                ORDER BY order_count DESC
+                LIMIT 20
+            ''',
+            r'가장\s*많이\s*팔린\s*제품\s*(\d+)개?': '''
+                SELECT 
+                    p.product_name,
+                    SUM(od.quantity) as total_quantity,
+                    ROUND(SUM(od.unit_price * od.quantity * (1 - od.discount)), 2) as total_sales
+                FROM products p
+                JOIN order_details od ON p.product_id = od.product_id
+                GROUP BY p.product_id, p.product_name
+                ORDER BY total_quantity DESC
+                LIMIT {}
+            ''',
+            r'국가별\s*고객\s*수': '''
+                SELECT 
+                    country,
+                    COUNT(*) as customer_count
+                FROM customers
+                WHERE country IS NOT NULL
+                GROUP BY country
+                ORDER BY customer_count DESC
+            ''',
+            r'직원별\s*매출': '''
+                SELECT 
+                    e.first_name || ' ' || e.last_name as employee_name,
+                    COUNT(o.order_id) as order_count,
+                    ROUND(SUM(od.unit_price * od.quantity * (1 - od.discount)), 2) as total_sales
+                FROM employees e
+                LEFT JOIN orders o ON e.employee_id = o.employee_id
+                LEFT JOIN order_details od ON o.order_id = od.order_id
+                GROUP BY e.employee_id, employee_name
+                ORDER BY total_sales DESC
+            '''
         }
     
     async def execute_query(
@@ -63,14 +133,18 @@ class SQLAgent(BaseAgent):
         start_time = time.time()
         
         logger.info(f"🤖 Processing question: '{question}' for user {user_id}")
+        logger.info(f"🔧 SQL Agent execute_query called with: question='{question}', database='{database}'")
         
         try:
             # Generate SQL from natural language
+            logger.info(f"🔍 Calling _generate_sql with question: '{question}'")
             sql_query, explanation = self._generate_sql(question)
             
-            logger.info(f"🔍 Generated SQL: {sql_query}")
+            logger.info(f"🔍 Generated SQL: '{sql_query}'")
+            logger.info(f"📝 Generated explanation: '{explanation}'")
             
             if not sql_query:
+                logger.error("❌ No SQL query generated!")
                 raise ValueError("Could not generate SQL query from the question")
             
             # Execute the SQL query
@@ -137,15 +211,20 @@ class SQLAgent(BaseAgent):
                         # Country-based customer query
                         country = match.group(1).title()
                         sql_query = sql_template.format(country)
-                        explanation = f"Finding customers from {country} using the customers table."
+                        explanation = f"{country} 국가의 고객을 조회합니다."
                     elif 'top' in pattern and match.groups():
                         # Top N customers query
                         limit = match.group(1)
                         sql_query = sql_template.format(limit)
-                        explanation = f"Finding top {limit} customers by order count."
+                        explanation = f"주문 횟수가 많은 상위 {limit}명의 고객을 조회합니다."
+                    elif '가장\s*많이\s*팔린\s*제품' in pattern and match.groups():
+                        # Top selling products
+                        limit = match.group(1)
+                        sql_query = sql_template.format(limit)
+                        explanation = f"가장 많이 팔린 상위 {limit}개 제품을 조회합니다."
                     else:
                         sql_query = sql_template
-                        explanation = "Generated SQL query based on pattern matching."
+                        explanation = self._get_korean_explanation_for_pattern(pattern)
                 else:
                     sql_query = sql_template
                     explanation = self._get_explanation_for_query(sql_query)
@@ -155,46 +234,88 @@ class SQLAgent(BaseAgent):
         
         # If no pattern matches, try to generate a basic query
         logger.warning(f"⚠️ No pattern matched for question: '{question}'")
+        logger.info(f"🔍 Checking fallback keywords in: '{question_lower}'")
         
-        # Default fallback queries
-        if any(word in question_lower for word in ['customer', 'customers']):
+        # Default fallback queries (English and Korean)
+        if any(word in question_lower for word in ['customer', 'customers', '고객']):
+            logger.info("📝 Fallback: Customer query detected")
             sql_query = "SELECT customer_id, company_name, country FROM customers LIMIT 10"
-            explanation = "Showing sample customers from the database."
-        elif any(word in question_lower for word in ['product', 'products']):
+            explanation = "고객 정보를 조회합니다."
+        elif any(word in question_lower for word in ['product', 'products', '제품', '상품']):
+            logger.info("📝 Fallback: Product query detected")
             sql_query = "SELECT product_id, product_name, unit_price FROM products LIMIT 10"
-            explanation = "Showing sample products from the database."
-        elif any(word in question_lower for word in ['order', 'orders']):
+            explanation = "제품 정보를 조회합니다."
+        elif any(word in question_lower for word in ['order', 'orders', '주문', '주문서']):
+            logger.info("📝 Fallback: Order query detected")
             sql_query = "SELECT order_id, customer_id, order_date FROM orders LIMIT 10"
-            explanation = "Showing sample orders from the database."
+            explanation = "주문 정보를 조회합니다."
+        elif any(word in question_lower for word in ['매출', '판매', 'sales', 'revenue']):
+            logger.info("📝 Fallback: Sales/Revenue query detected")
+            sql_query = '''
+                SELECT 
+                    strftime('%Y-%m', o.order_date) as month,
+                    ROUND(SUM(od.unit_price * od.quantity * (1 - od.discount)), 2) as total_sales
+                FROM orders o
+                JOIN order_details od ON o.order_id = od.order_id
+                WHERE o.order_date IS NOT NULL
+                GROUP BY strftime('%Y-%m', o.order_date)
+                ORDER BY month DESC
+                LIMIT 12
+            '''
+            explanation = "최근 12개월간의 월별 매출 데이터를 조회합니다."
         else:
             # Very basic fallback
+            logger.warning("📝 No fallback keyword matched, using generic message")
             sql_query = "SELECT 'I need more specific information to generate a proper query' as message"
-            explanation = "Could not understand the question. Please try asking about customers, products, or orders."
+            explanation = "질문을 이해하지 못했습니다. 고객, 제품, 주문, 매출에 대해 질문해보세요."
         
         logger.info(f"🔄 Using fallback SQL: {sql_query}")
         return sql_query, explanation
     
+    def _get_korean_explanation_for_pattern(self, pattern: str) -> str:
+        """Generate Korean explanation for pattern."""
+        if '월별\s*매출\s*추이' in pattern:
+            return "월별 매출 추이를 분석하여 시간에 따른 매출 변화를 보여줍니다."
+        elif '고객\s*수' in pattern:
+            return "데이터베이스에 등록된 총 고객 수를 조회합니다."
+        elif '제품\s*수' in pattern:
+            return "데이터베이스에 등록된 총 제품 수를 조회합니다."
+        elif '주문\s*수' in pattern:
+            return "데이터베이스에 등록된 총 주문 수를 조회합니다."
+        elif '카테고리별\s*제품' in pattern:
+            return "각 카테고리별로 제품 수를 집계하여 보여줍니다."
+        elif '카테고리별\s*평균\s*주문\s*금액' in pattern:
+            return "각 카테고리별 평균 주문 금액을 계산하여 보여줍니다."
+        elif '고객별\s*주문\s*횟수' in pattern:
+            return "각 고객별 주문 횟수를 집계하여 상위 고객을 보여줍니다."
+        elif '국가별\s*고객\s*수' in pattern:
+            return "국가별로 고객 수를 집계하여 보여줍니다."
+        elif '직원별\s*매출' in pattern:
+            return "각 직원별 매출 실적을 집계하여 보여줍니다."
+        else:
+            return "질문에 기반하여 데이터베이스에서 정보를 조회합니다."
+
     def _get_explanation_for_query(self, sql_query: str) -> str:
         """Generate explanation for SQL query."""
         sql_lower = sql_query.lower()
         
         if 'count(*)' in sql_lower:
             if 'customers' in sql_lower:
-                return "Counting the total number of customers in the database."
+                return "데이터베이스의 총 고객 수를 계산합니다."
             elif 'products' in sql_lower:
-                return "Counting the total number of products in the database."
+                return "데이터베이스의 총 제품 수를 계산합니다."
             elif 'orders' in sql_lower:
-                return "Counting the total number of orders in the database."
+                return "데이터베이스의 총 주문 수를 계산합니다."
             else:
-                return "Counting records in the database."
+                return "데이터베이스의 레코드 수를 계산합니다."
         elif 'group by' in sql_lower:
-            return "Grouping and aggregating data to show summary statistics."
+            return "데이터를 그룹화하여 요약 통계를 보여줍니다."
         elif 'join' in sql_lower:
-            return "Combining data from multiple tables to provide comprehensive results."
+            return "여러 테이블의 데이터를 결합하여 종합적인 결과를 제공합니다."
         elif 'where' in sql_lower:
-            return "Filtering data based on specific conditions."
+            return "특정 조건에 따라 데이터를 필터링합니다."
         else:
-            return "Retrieving data from the database based on your question."
+            return "질문에 기반하여 데이터베이스에서 정보를 조회합니다."
     
     async def _execute_sql(self, sql_query: str, database: str, max_rows: Optional[int] = None) -> List[Dict[str, Any]]:
         """

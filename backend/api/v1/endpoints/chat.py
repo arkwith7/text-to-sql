@@ -373,6 +373,10 @@ async def process_chat_query(
         
         try:
             # Execute the query using the SQL agent
+            logger.info(f"🚀 About to call SQL Agent with question: '{query_request.question}'")
+            logger.info(f"🔧 SQL Agent object: {sql_agent}")
+            logger.info(f"🔧 SQL Agent type: {type(sql_agent)}")
+            
             result = await sql_agent.execute_query(
                 question=query_request.question,
                 database="northwind",  # Default database
@@ -381,6 +385,8 @@ async def process_chat_query(
                 include_explanation=query_request.include_explanation,
                 max_rows=query_request.max_rows
             )
+            
+            logger.info(f"🎯 SQL Agent returned: {result}")
             
             execution_time = time.time() - start_time
             
