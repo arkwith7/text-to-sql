@@ -48,6 +48,27 @@ async def create_users():
         import traceback
         traceback.print_exc()
 
+    # --- Create regular user ---
+    user_data = UserCreate(
+        email="demo@example.com",
+        password="demo1234",
+        full_name="홍길삼",
+        company="Example Inc.",
+        role=UserRole.ANALYST
+    )
+    print(f"Creating user: {user_data.email}...")
+    try:
+        existing_user = await auth_service.get_user_by_email(user_data.email)
+        if existing_user:
+            print(f"User {user_data.email} already exists.")
+        else:
+            new_user = await auth_service.create_user(user_data, analytics_service=analytics_service)
+            print(f"Successfully created user with ID: {new_user['id']}")
+    except Exception as e:
+        print(f"Error creating user {user_data.email}: {e}")
+        import traceback
+        traceback.print_exc()
+
     # --- Create admin user ---
     admin_data = UserCreate(
         email="admin@example.com",

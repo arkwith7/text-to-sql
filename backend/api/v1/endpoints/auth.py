@@ -69,7 +69,12 @@ async def login(
     
     try:
         # Authenticate user
-        user = await auth_service.authenticate_user(user_credentials, analytics_service)
+        user = await auth_service.authenticate_user(
+            login_data=user_credentials,
+            analytics_service=analytics_service,
+            ip_address=request.client.host,
+            user_agent=request.headers.get("user-agent")
+        )
         
         # Create tokens
         token_response = await auth_service.create_token(user["id"])

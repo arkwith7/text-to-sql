@@ -37,27 +37,17 @@ from core import SQLAgent, LangChainTextToSQLAgent
 
 from services.auth_service import AuthService
 from services.auth_security import get_openapi_security_schemes
-from services.analytics_service import AnalyticsService
+from services.analytics_service import AnalyticsService, EventType
 from services.chat_service import ChatSessionService
 from utils.cache import cache
 from api.v1.api import api_router
-# main.py 상단에 추가할 import
-from utils.logging_config import setup_logging, RequestLogger
-import sys
-
 # Configure logging
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-# )
-# logger = logging.getLogger(__name__)
-
-# 새로운 로깅 설정:
-# 로깅 시스템 초기화 (앱 시작 전에)
-setup_logging()
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-# lifespan 함수에서 로깅 관련 정보 추가:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown."""
@@ -191,10 +181,11 @@ app = FastAPI(
 # Add middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_settings().cors_origins,
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 if get_settings().environment == "production":
     app.add_middleware(
@@ -239,177 +230,47 @@ app.openapi = custom_openapi
 
 # 기존 track_requests 미들웨어를 다음으로 교체:
 @app.middleware("http")
-async def enhanced_request_tracking(request: Request, call_next):
-    """향상된 API 요청 추적 및 로깅 미들웨어"""
+async def simple_request_tracking(request: Request, call_next):
+    """Simplified request tracking middleware - performance optimized."""
     start_time = time.time()
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
     
-    # 사용자 정보 추출 (가능한 경우)
-    user_id = None
-    try:
-        if hasattr(request.app.state, 'auth_service'):
-            user = await request.app.state.auth_service.get_current_user(request, required=False)
-            user_id = user.get('id') if user else None
-    except:
-        pass  # 인증 실패 시 무시
-    
-    # 요청 본문 추출 (POST/PUT 요청인 경우)
-    request_body = None
-    if request.method in ["POST", "PUT", "PATCH"]:
-        try:
-            # 요청 본문을 읽고 다시 설정 (한 번만 읽을 수 있으므로)
-            body = await request.body()
-            if body:
-                try:
-                    request_body = json.loads(body.decode('utf-8'))
-                except json.JSONDecodeError:
-                    request_body = {"raw_body": body.decode('utf-8', errors='ignore')[:500]}
-        except Exception as e:
-            logger.debug(f"요청 본문 읽기 실패: {str(e)}")
-    
-    # 요청 로깅
-    RequestLogger.log_request(
-        request_id=request_id,
-        method=request.method,
-        path=request.url.path,
-        user_id=user_id,
-        body=request_body,
-        query_params=dict(request.query_params) if request.query_params else None
-    )
+    # OPTIONS 요청은 로깅 없이 바로 처리
+    if request.method == "OPTIONS":
+        response = await call_next(request)
+        return response
     
     # 요청 처리
-    response = None
-    error_message = None
     try:
         response = await call_next(request)
     except Exception as e:
-        error_message = str(e)
-        logger.error(
-            f"요청 처리 중 오류 발생: {error_message}",
-            extra={
-                'request_id': request_id,
-                'user_id': user_id,
-                'error_details': error_message
-            }
-        )
-        # 오류 응답 생성
+        logger.error(f"Request error: {str(e)}")
         response = JSONResponse(
             status_code=500,
             content={"detail": "Internal server error", "request_id": request_id}
         )
     
-    # 처리 시간 계산
+    # 처리 시간 계산 및 헤더 추가
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
     response.headers["X-Request-ID"] = request_id
     
-    # 응답 크기 계산 (가능한 경우)
-    response_size = None
-    if hasattr(response, 'body'):
-        try:
-            response_size = len(response.body)
-        except:
-            pass
-    
-    # 응답 로깅
-    RequestLogger.log_response(
-        request_id=request_id,
-        status_code=response.status_code,
-        response_time=process_time,
-        user_id=user_id,
-        response_size=response_size,
-        error_message=error_message
-    )
-    
-    # 성능 메트릭 로깅 (기존 analytics_service 사용)
-    try:
-        analytics_service = request.app.state.analytics_service if hasattr(request.app.state, 'analytics_service') else None
-        if analytics_service:
-            await analytics_service.log_performance_metric(
-                "api_request_duration",
-                process_time * 1000,
-                "ms",
-                {
-                    "method": request.method,
-                    "path": request.url.path,
-                    "status_code": response.status_code,
-                    "request_id": request_id,
-                    "user_id": user_id
-                }
-            )
-    except Exception as e:
-        logger.warning(f"성능 메트릭 로깅 실패: {str(e)}")
+    # 느린 요청만 로깅 (1초 이상)
+    if process_time > 1.0:
+        logger.warning(f"Slow request: {request.method} {request.url.path} - {process_time:.3f}s")
     
     return response
 
 
-# health check 엔드포인트도 로깅 추가:
 @app.get("/health", tags=["System"])
-async def health_check(request: Request):
-    """Health check endpoint with enhanced logging."""
-    request_id = getattr(request.state, 'request_id', 'unknown')
-    logger.info(f"헬스 체크 요청 - Request ID: {request_id}")
-    
-    try:
-        # 캐시 상태 확인
-        cache_stats = {"status": "unknown"}
-        try:
-            if hasattr(request.app.state, 'cache'):
-                cache = request.app.state.cache
-                cache_stats = {
-                    "status": "connected",
-                    "info": cache.info() if hasattr(cache, 'info') else "available"
-                }
-        except Exception as cache_error:
-            logger.warning(f"캐시 상태 확인 실패: {str(cache_error)}")
-            cache_stats = {"status": "disconnected", "error": str(cache_error)}
-        
-        # 데이터베이스 상태 확인
-        db_status = "unknown"
-        try:
-            if hasattr(request.app.state, 'db_manager'):
-                db_manager = request.app.state.db_manager
-                # 간단한 연결 테스트
-                await db_manager.test_connections()
-                db_status = "connected"
-        except Exception as db_error:
-            logger.warning(f"데이터베이스 상태 확인 실패: {str(db_error)}")
-            db_status = f"error: {str(db_error)}"
-        
-        health_status = {
-            "status": "healthy",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "version": "2.0.0",
-            "database": db_status,
-            "cache": cache_stats,
-            "services": {
-                "sql_agent": hasattr(request.app.state, 'sql_agent'),
-                "auth_service": hasattr(request.app.state, 'auth_service'),
-                "analytics_service": hasattr(request.app.state, 'analytics_service'),
-                "chat_service": hasattr(request.app.state, 'chat_service')
-            },
-            "request_id": request_id
-        }
-        
-        logger.info(f"헬스 체크 성공 - Request ID: {request_id}")
-        return health_status
-        
-    except Exception as e:
-        logger.error(
-            f"헬스 체크 실패 - Request ID: {request_id}",
-            extra={'error_details': str(e)},
-            exc_info=True
-        )
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "status": "unhealthy",
-                "error": str(e),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "request_id": request_id
-            }
-        )
+async def health_check():
+    """Simple health check endpoint - optimized for performance."""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": "2.0.0"
+    }
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):

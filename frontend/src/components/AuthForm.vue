@@ -180,10 +180,22 @@ const handleSubmit = async () => {
 };
 
 const handleDemoLogin = async () => {
-  const success = await loginDemo();
+  console.log('🎯 데모 로그인 시작...');
   
-  if (success) {
-    emit('success');
+  try {
+    console.log('📞 데모 로그인 API 호출...');
+    const success = await loginDemo();
+    
+    if (success) {
+      console.log('✅ 데모 로그인 성공');
+      emit('success');
+    } else {
+      console.log('❌ 데모 로그인 실패');
+      console.log('Error details:', error.value);
+      // useAuth에서 설정된 error를 사용
+    }
+  } catch (err) {
+    console.error('💥 데모 로그인 예외 발생:', err);
   }
 };
 </script>

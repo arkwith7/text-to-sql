@@ -21,13 +21,11 @@ import uuid
 import hashlib
 import secrets
 from enum import Enum
+import asyncio
 
 from core.config import get_settings
 from database.connection_manager import DatabaseManager
 from services.analytics_service import AnalyticsService, EventType
-
-# 파일 상단에 추가할 import
-from utils.logging_config import AuthLogger
 
 logger = logging.getLogger(__name__)
 
@@ -110,9 +108,12 @@ class AuthService:
         """Hash a password using bcrypt."""
         return self.pwd_context.hash(password)
     
-    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash."""
-        return self.pwd_context.verify(plain_password, hashed_password)
+    async def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        """Verify a password against its hash asynchronously."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, self.pwd_context.verify, plain_password, hashed_password
+        )
     
     def create_access_token(self, data: Dict[str, Any]) -> str:
         """Create a JWT access token."""
@@ -459,27 +460,10 @@ class AuthService:
         self, login_data: UserLogin, analytics_service: AnalyticsService, 
         ip_address: str = None, user_agent: str = None
     ) -> Dict[str, Any]:
-        """Authenticate a user with comprehensive logging."""
-        self.logger.info(
-            f"🔐 사용자 로그인 시도 - Email: {login_data.email}",
-            extra={'email': login_data.email, 'login_attempt': True}
-        )
-        
+        """Authenticate a user - optimized for performance."""
         try:
             # 계정 잠금 확인
             if self._is_locked_out(login_data.email):
-                self.logger.warning(
-                    f"🔒 계정 잠금됨 - Email: {login_data.email}",
-                    extra={'email': login_data.email, 'reason': 'too_many_failed_attempts'}
-                )
-                
-                AuthLogger.log_auth_event(
-                    event_type="login_blocked",
-                    email=login_data.email,
-                    success=False,
-                    error_message="Account locked due to too many failed attempts"
-                )
-                
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Too many failed login attempts. Please try again later."
@@ -488,42 +472,15 @@ class AuthService:
             # 사용자 조회
             user = await self.get_user_by_email(login_data.email)
             if not user:
-                self.logger.warning(
-                    f"⚠️ 존재하지 않는 사용자 - Email: {login_data.email}",
-                    extra={'email': login_data.email, 'reason': 'user_not_found'}
-                )
-                
                 self._record_failed_attempt(login_data.email)
-                
-                AuthLogger.log_auth_event(
-                    event_type="login_failed",
-                    email=login_data.email,
-                    success=False,
-                    error_message="User not found"
-                )
-                
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid email or password"
                 )
             
             # 비밀번호 검증
-            if not self.verify_password(login_data.password, user["password_hash"]):
-                self.logger.warning(
-                    f"🔑 비밀번호 불일치 - Email: {login_data.email}",
-                    extra={'email': login_data.email, 'user_id': user['id'], 'reason': 'invalid_password'}
-                )
-                
+            if not await self.verify_password(login_data.password, user["password_hash"]):
                 self._record_failed_attempt(login_data.email)
-                
-                AuthLogger.log_auth_event(
-                    event_type="login_failed",
-                    user_id=user['id'],
-                    email=login_data.email,
-                    success=False,
-                    error_message="Invalid password"
-                )
-                
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid email or password"
@@ -531,19 +488,6 @@ class AuthService:
             
             # 계정 활성화 확인
             if not user["is_active"]:
-                self.logger.warning(
-                    f"🚫 비활성화된 계정 - Email: {login_data.email}, User ID: {user['id']}",
-                    extra={'email': login_data.email, 'user_id': user['id'], 'reason': 'account_disabled'}
-                )
-                
-                AuthLogger.log_auth_event(
-                    event_type="login_failed",
-                    user_id=user['id'],
-                    email=login_data.email,
-                    success=False,
-                    error_message="Account is disabled"
-                )
-                
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Account is disabled"
@@ -553,45 +497,20 @@ class AuthService:
             self._clear_failed_attempts(login_data.email)
             await self._update_last_login(user["id"])
             
-            self.logger.info(
-                f"✅ 로그인 성공 - Email: {login_data.email}, User ID: {user['id']}",
-                extra={
-                    'email': login_data.email,
-                    'user_id': user['id'],
-                    'role': user['role'],
-                    'last_login_updated': True
-                }
-            )
+            # 성공 로깅 (간단하게)
+            logger.info(f"Login success: {login_data.email}")
             
-            # 인증 로그
-            AuthLogger.log_auth_event(
-                event_type="login_success",
-                user_id=user['id'],
-                email=login_data.email,
-                success=True
+            # 분석 로깅 (백그라운드로 처리)
+            asyncio.create_task(
+                self._log_auth_event(analytics_service, user["id"], EventType.USER_LOGGED_IN, login_data.email)
             )
-            
-            # 분석 로깅
-            await self._log_auth_event(analytics_service, user["id"], EventType.USER_LOGGED_IN, login_data.email)
 
             return user
         
         except HTTPException:
             raise
         except Exception as e:
-            self.logger.error(
-                f"❌ 로그인 처리 오류 - Email: {login_data.email}, 오류: {str(e)}",
-                extra={'email': login_data.email, 'error_details': str(e)},
-                exc_info=True
-            )
-            
-            AuthLogger.log_auth_event(
-                event_type="login_error",
-                email=login_data.email,
-                success=False,
-                error_message=str(e)
-            )
-            
+            logger.error(f"Login error for {login_data.email}: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Authentication failed"
@@ -956,6 +875,36 @@ class AuthService:
                 "queries_today": 0,
                 "average_tokens_per_query": 0.0
             }
+
+    async def authenticate_user_simple(self, email: str, password: str) -> Dict[str, Any]:
+        """단순 사용자 인증 (이메일/패스워드)."""
+        
+        # Rate limit 확인
+        if self._is_locked_out(email):
+            self.logger.warning(f"🔒 로그인 시도 차단됨 - Email: {email}")
+            raise ValueError("너무 많은 로그인 시도 실패. 잠시 후 다시 시도해주세요.")
+        
+        # 사용자 조회
+        user = await self.get_user_by_email(email)
+        
+        if not user or not user["is_active"]:
+            self.logger.warning(f"👤 존재하지 않거나 비활성화된 사용자 - Email: {email}")
+            self._record_failed_attempt(email)
+            raise ValueError("잘못된 이메일 또는 패스워드입니다.")
+        
+        # 비밀번호 검증
+        if not await self.verify_password(password, user["password_hash"]):
+            self.logger.warning(f"🔑 비밀번호 불일치 - Email: {email}")
+            self._record_failed_attempt(email)
+            raise ValueError("잘못된 이메일 또는 패스워드입니다.")
+        
+        # 성공 시 실패 기록 초기화 및 마지막 로그인 시간 업데이트
+        self._clear_failed_attempts(email)
+        await self._update_last_login(user["id"])
+        
+        self.logger.info(f"✅ 사용자 인증 성공 - Email: {email}")
+        
+        return user
 
 # Permission checking decorators
 def require_role(required_role: UserRole):
