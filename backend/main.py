@@ -10,6 +10,7 @@ This is the modernized version of the Text-to-SQL application using:
 - Analytics and monitoring
 """
 
+import asyncio
 import logging
 import time
 import uuid
@@ -213,7 +214,19 @@ async def health_check(request: Request):
         db_manager = request.app.state.db_manager
         await db_manager.test_connections()
         
-        cache_stats = request.app.state.cache.get_cache_stats()
+        # Get cache stats (handle both sync and async methods)
+        cache_stats = {}
+        try:
+            cache = request.app.state.cache
+            if hasattr(cache, 'get_cache_stats'):
+                if asyncio.iscoroutinefunction(cache.get_cache_stats):
+                    cache_stats = await cache.get_cache_stats()
+                else:
+                    cache_stats = cache.get_cache_stats()
+            else:
+                cache_stats = {"status": "cache_stats_not_available"}
+        except Exception as cache_error:
+            cache_stats = {"error": str(cache_error), "status": "cache_error"}
         
         return {
             "status": "healthy",

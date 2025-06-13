@@ -687,3 +687,32 @@ class AnalyticsService:
         except Exception as e:
             logger.error(f"Error getting usage trends: {str(e)}")
             return {"trends": [], "period_days": days}
+
+    async def _save_event_to_db(self, event: Dict[str, Any]):
+        """Save event to database."""
+        try:
+            insert_query = """
+            INSERT INTO events (id, event_type, user_id, event_data, timestamp, ip_address, user_agent, session_id)
+            VALUES (:id, :event_type, :user_id, :event_data, :timestamp, :ip_address, :user_agent, :session_id)
+            """
+            
+            params = {
+                "id": str(uuid.uuid4()),
+                "event_type": event.get("type"),
+                "user_id": event.get("user_id"),
+                "event_data": json.dumps(event.get("data")) if event.get("data") else None,
+                "timestamp": datetime.now(timezone.utc),
+                "ip_address": None,  # Could extract from request if needed
+                "user_agent": None,  # Could extract from request if needed
+                "session_id": None   # Could extract from request if needed
+            }
+
+            await self.db_manager.execute_query_safe(
+                insert_query,
+                params=params,
+                database_type="app"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error saving event to database: {str(e)}")
+            # Don't raise exception to avoid breaking the main flow

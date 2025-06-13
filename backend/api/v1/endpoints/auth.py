@@ -5,7 +5,7 @@ Authentication endpoints for Text-to-SQL application.
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from services.auth_service import AuthService, UserCreate, UserLogin, UserResponse
 from services.auth_dependencies import get_current_user, get_current_admin_user
@@ -15,6 +15,7 @@ security = HTTPBearer()
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     expires_in: int
     user: UserResponse
@@ -23,6 +24,12 @@ class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str
 
+class AuthStatsResponse(BaseModel):
+    total_users: int
+    active_users: int
+    recent_logins: int
+    user_registrations_today: int
+
 @router.post("/register", response_model=TokenResponse)
 async def register(
     user_data: UserCreate,
@@ -30,10 +37,16 @@ async def register(
 ):
     """Register a new user."""
     auth_service: AuthService = request.app.state.auth_service
+    analytics_service = request.app.state.analytics_service
     
     try:
-        result = await auth_service.register_user(user_data)
-        return result
+        # Create user
+        user = await auth_service.create_user(user_data, analytics_service)
+        
+        # Create tokens
+        token_response = await auth_service.create_token(user["id"])
+        return token_response
+        
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -52,10 +65,16 @@ async def login(
 ):
     """Authenticate user and return access token."""
     auth_service: AuthService = request.app.state.auth_service
+    analytics_service = request.app.state.analytics_service
     
     try:
-        result = await auth_service.authenticate_user(user_credentials)
-        return result
+        # Authenticate user
+        user = await auth_service.authenticate_user(user_credentials, analytics_service)
+        
+        # Create tokens
+        token_response = await auth_service.create_token(user["id"])
+        return token_response
+        
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -73,6 +92,64 @@ async def get_current_user_info(
 ):
     """Get current user information."""
     return current_user
+
+@router.get("/stats")
+async def get_user_stats(
+    request: Request,
+    current_user = Depends(get_current_user)
+):
+    """Get user usage statistics including token usage."""
+    analytics_service = request.app.state.analytics_service
+    
+    try:
+        # current_user is a dict, so we need to access it properly
+        user_id = current_user.get("id") if isinstance(current_user, dict) else current_user.id
+        
+        # Get user statistics from analytics service
+        stats = await analytics_service.get_user_stats(user_id)
+        
+        return {
+            "user_id": user_id,
+            "total_queries": stats.get("total_queries", 0),
+            "total_tokens": stats.get("total_tokens", 0),
+            "input_tokens": stats.get("input_tokens", 0),
+            "output_tokens": stats.get("output_tokens", 0),
+            "last_query_at": stats.get("last_query_at"),
+            "daily_usage": stats.get("daily_usage", {}),
+            "monthly_usage": stats.get("monthly_usage", {}),
+            "average_tokens_per_query": stats.get("average_tokens_per_query", 0)
+        }
+    except Exception as e:
+        # Return default stats if analytics service fails
+        user_id = current_user.get("id") if isinstance(current_user, dict) else current_user.id
+        return {
+            "user_id": user_id,
+            "total_queries": 0,
+            "total_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "last_query_at": None,
+            "daily_usage": {},
+            "monthly_usage": {},
+            "average_tokens_per_query": 0
+        }
+
+@router.get("/admin/stats", response_model=AuthStatsResponse)
+async def get_auth_stats(
+    request: Request,
+    current_user: UserResponse = Depends(get_current_admin_user)
+):
+    """Get authentication statistics (admin only)."""
+    auth_service: AuthService = request.app.state.auth_service
+    
+    try:
+        stats = await auth_service.get_auth_stats()
+        return AuthStatsResponse(**stats)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve authentication statistics"
+        )
 
 @router.post("/change-password")
 async def change_password(

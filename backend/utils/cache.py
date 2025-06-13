@@ -652,6 +652,30 @@ class CacheManager:
             logger.error(f"Cache clear pattern error for pattern {pattern}: {e}")
             return 0
     
+    async def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        try:
+            if self.redis_client:
+                info = await self.redis_client.info()
+                return {
+                    "connected_clients": info.get("connected_clients", 0),
+                    "used_memory": info.get("used_memory", 0),
+                    "used_memory_human": info.get("used_memory_human", "0B"),
+                    "keyspace_hits": info.get("keyspace_hits", 0),
+                    "keyspace_misses": info.get("keyspace_misses", 0),
+                    "total_commands_processed": info.get("total_commands_processed", 0),
+                    "redis_version": info.get("redis_version", "unknown"),
+                    "redis_available": True
+                }
+            else:
+                return {
+                    "status": "redis_not_available",
+                    "redis_available": False
+                }
+        except Exception as e:
+            logger.error(f"Error getting cache stats: {str(e)}")
+            return {"error": str(e), "redis_available": False}
+
     async def close(self):
         """Close Redis connection."""
         if self.redis_client:

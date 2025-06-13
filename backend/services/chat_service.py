@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 import structlog
+import json
 
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
@@ -30,9 +31,14 @@ class ChatSessionService:
         """Initialize chat session service with database manager."""
         self.db_manager = db_manager
         
-    async def create_session(self, user_id: str, title: Optional[str] = None, context: Optional[str] = None) -> Dict[str, Any]:
+    async def create_session(self, user_id: str, title: Optional[str] = None, database: str = "northwind") -> Dict[str, Any]:
         """
         Create a new chat session for a user and return session data.
+        
+        Args:
+            user_id: The user ID
+            title: Optional session title
+            database: Target database name
         """
         session_id = str(uuid.uuid4())
         
@@ -60,10 +66,11 @@ class ChatSessionService:
             
             await self.db_manager.execute_query_safe(query, params=params, database_type="app")
             
-            logger.info(f"Created new chat session {session_id} for user {user_id}")
+            logger.info(f"Created new chat session {session_id} for user {user_id} (database: {database})")
             return {
                 "session_id": session_id,
                 "title": params["title"],
+                "database": database,
                 "created_at": params["created_at"],
                 "updated_at": params["updated_at"],
                 "is_active": True,
@@ -73,13 +80,14 @@ class ChatSessionService:
             logger.error(f"Error creating chat session: {str(e)}")
             raise
     
-    async def get_user_sessions(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    async def get_user_sessions(self, user_id: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """
         Get all active chat sessions for a user.
         
         Args:
             user_id: The user ID
             limit: Maximum number of sessions to return
+            offset: Number of sessions to skip
             
         Returns:
             List of session dictionaries
@@ -90,12 +98,12 @@ class ChatSessionService:
             FROM chat_sessions 
             WHERE user_id = :user_id AND is_active = true
             ORDER BY updated_at DESC
-            LIMIT :limit
+            LIMIT :limit OFFSET :offset
             """
             
             result = await self.db_manager.execute_query_safe(
                 query, 
-                params={"user_id": user_id, "limit": limit}, 
+                params={"user_id": user_id, "limit": limit, "offset": offset}, 
                 database_type="app"
             )
             
@@ -109,30 +117,72 @@ class ChatSessionService:
             logger.error(f"Error fetching user sessions: {str(e)}")
             return []
     
-    async def get_session_messages(self, session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    async def get_session(self, session_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get all messages in a chat session.
+        Get a specific chat session for a user.
         
         Args:
             session_id: The session ID
+            user_id: The user ID (for security)
+            
+        Returns:
+            Session dictionary or None if not found
+        """
+        try:
+            query = """
+            SELECT id, title, created_at, updated_at, last_message_at, message_count, is_active
+            FROM chat_sessions 
+            WHERE id = :session_id AND user_id = :user_id AND is_active = true
+            """
+            
+            result = await self.db_manager.execute_query_safe(
+                query, 
+                params={"session_id": session_id, "user_id": user_id}, 
+                database_type="app"
+            )
+            
+            if result.get("success") and result.get("data"):
+                return result["data"][0]
+            else:
+                logger.warning(f"Session {session_id} not found for user {user_id}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error fetching session: {str(e)}")
+            return None
+    
+    async def get_session_messages(self, session_id: str, user_id: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Get all messages in a chat session for a specific user.
+        
+        Args:
+            session_id: The session ID
+            user_id: The user ID (for security)
             limit: Maximum number of messages to return
+            offset: Number of messages to skip
             
         Returns:
             List of message dictionaries
         """
         try:
+            # First verify the session belongs to the user
+            session = await self.get_session(session_id, user_id)
+            if not session:
+                logger.warning(f"Session {session_id} not found for user {user_id}")
+                return []
+            
             query = """
             SELECT id, message_type, content, query_id, sql_query, query_result,
                    execution_time, error_message, timestamp, sequence_number
             FROM chat_messages 
             WHERE session_id = :session_id
             ORDER BY sequence_number ASC
-            LIMIT :limit
+            LIMIT :limit OFFSET :offset
             """
             
             result = await self.db_manager.execute_query_safe(
                 query,
-                params={"session_id": session_id, "limit": limit},
+                params={"session_id": session_id, "limit": limit, "offset": offset},
                 database_type="app"
             )
             
@@ -204,6 +254,14 @@ class ChatSessionService:
             )
             """
             
+            # Convert query_result to JSON string if it's a dict/list
+            query_result_json = None
+            if query_result is not None:
+                if isinstance(query_result, (dict, list)):
+                    query_result_json = json.dumps(query_result)
+                else:
+                    query_result_json = str(query_result)
+            
             params = {
                 "id": message_id,
                 "session_id": session_id,
@@ -211,7 +269,7 @@ class ChatSessionService:
                 "content": content,
                 "query_id": query_id,
                 "sql_query": sql_query,
-                "query_result": query_result,
+                "query_result": query_result_json,
                 "execution_time": execution_time,
                 "error_message": error_message,
                 "timestamp": datetime.now(timezone.utc),

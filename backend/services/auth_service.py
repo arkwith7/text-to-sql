@@ -108,22 +108,25 @@ class AuthService:
     def create_access_token(self, data: Dict[str, Any]) -> str:
         """Create a JWT access token."""
         to_encode = data.copy()
-        expire = datetime.now(timezone.utc) + timedelta(minutes=self.access_token_expire_minutes)
+        now = datetime.now(timezone.utc)
+        expire = now + timedelta(minutes=self.access_token_expire_minutes)
         to_encode.update({
-            "exp": expire,
-            "type": TokenType.ACCESS,
-            "iat": datetime.now(timezone.utc)
+            "exp": int(expire.timestamp()),
+            "type": TokenType.ACCESS.value,
+            "iat": int(now.timestamp())
         })
         
         return jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
     
     def create_refresh_token(self, user_id: str) -> str:
         """Create a JWT refresh token."""
+        now = datetime.now(timezone.utc)
+        expire = now + timedelta(days=self.refresh_token_expire_days)
         to_encode = {
             "sub": user_id,
-            "type": TokenType.REFRESH,
-            "exp": datetime.now(timezone.utc) + timedelta(days=self.refresh_token_expire_days),
-            "iat": datetime.now(timezone.utc),
+            "type": TokenType.REFRESH.value,
+            "exp": int(expire.timestamp()),
+            "iat": int(now.timestamp()),
             "jti": str(uuid.uuid4())  # JWT ID for token revocation
         }
         
@@ -135,7 +138,7 @@ class AuthService:
             payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
             
             # Check token type
-            if payload.get("type") != token_type:
+            if payload.get("type") != token_type.value:
                 raise JWTError("Invalid token type")
             
             # Check expiration
@@ -631,20 +634,135 @@ class AuthService:
         return result and result.get("success") and result["data"][0]["count"] > 0
     
     async def _invalidate_refresh_token(self, user_id: str, refresh_token: str):
-        """Invalidate a refresh token."""
-        token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
-        
-        query = """
-            UPDATE refresh_tokens 
-            SET is_revoked = TRUE, revoked_at = :revoked_at
-            WHERE user_id = :user_id AND token_hash = :token_hash
-        """
-        
-        await self.db_manager.execute_query("app", query, {
-            "user_id": user_id,
-            "token_hash": token_hash,
-            "revoked_at": datetime.now(timezone.utc)
-        })
+        """Invalidate a specific refresh token."""
+        try:
+            query = """
+                DELETE FROM refresh_tokens 
+                WHERE user_id = :user_id AND token_hash = :token_hash
+            """
+            
+            token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+            
+            await self.db_manager.execute_query(
+                "app", 
+                query, 
+                {"user_id": user_id, "token_hash": token_hash}
+            )
+            
+        except Exception as e:
+            logger.error(f"Error invalidating refresh token: {str(e)}")
+
+    async def get_auth_stats(self) -> Dict[str, Any]:
+        """Get authentication statistics."""
+        try:
+            # Get total users
+            total_users_query = "SELECT COUNT(*) as count FROM users"
+            total_users_result = await self.db_manager.execute_query("app", total_users_query)
+            total_users = total_users_result.get("data", [{}])[0].get("count", 0) if total_users_result.get("success") else 0
+            
+            # Get active users (logged in within last 30 days)
+            active_users_query = """
+                SELECT COUNT(*) as count FROM users 
+                WHERE last_login >= datetime('now', '-30 days')
+            """
+            active_users_result = await self.db_manager.execute_query("app", active_users_query)
+            active_users = active_users_result.get("data", [{}])[0].get("count", 0) if active_users_result.get("success") else 0
+            
+            # Get recent logins (last 24 hours)
+            recent_logins_query = """
+                SELECT COUNT(*) as count FROM users 
+                WHERE last_login >= datetime('now', '-1 day')
+            """
+            recent_logins_result = await self.db_manager.execute_query("app", recent_logins_query)
+            recent_logins = recent_logins_result.get("data", [{}])[0].get("count", 0) if recent_logins_result.get("success") else 0
+            
+            # Get user registrations today
+            registrations_today_query = """
+                SELECT COUNT(*) as count FROM users 
+                WHERE date(created_at) = date('now')
+            """
+            registrations_today_result = await self.db_manager.execute_query("app", registrations_today_query)
+            registrations_today = registrations_today_result.get("data", [{}])[0].get("count", 0) if registrations_today_result.get("success") else 0
+            
+            return {
+                "total_users": total_users,
+                "active_users": active_users,
+                "recent_logins": recent_logins,
+                "user_registrations_today": registrations_today
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting auth stats: {str(e)}")
+            # Return default values on error
+            return {
+                "total_users": 0,
+                "active_users": 0,
+                "recent_logins": 0,
+                "user_registrations_today": 0
+            }
+
+    async def get_token_usage_stats(self, user_id: str) -> Dict[str, Any]:
+        """Get LLM token usage statistics for a specific user."""
+        try:
+            # Get user's current token usage
+            user_query = "SELECT token_usage FROM users WHERE id = :user_id"
+            user_result = await self.db_manager.execute_query("app", user_query, {"user_id": user_id})
+            user_token_usage = user_result.get("data", [{}])[0].get("token_usage", 0) if user_result.get("success") and user_result.get("data") else 0
+            
+            # Initialize default values
+            total_queries = 0
+            queries_today = 0
+            
+            # Try to get total queries by user from query_analytics table (if it exists)
+            try:
+                total_queries_query = """
+                    SELECT COUNT(*) as count FROM query_analytics 
+                    WHERE user_id = :user_id
+                """
+                total_queries_result = await self.db_manager.execute_query("app", total_queries_query, {"user_id": user_id})
+                if total_queries_result.get("success") and total_queries_result.get("data"):
+                    total_queries = total_queries_result["data"][0].get("count", 0)
+            except Exception as e:
+                logger.debug(f"query_analytics table not available: {str(e)}")
+                # Table might not exist yet, use default value
+                total_queries = 0
+            
+            # Try to get queries today from query_analytics table (if it exists)
+            try:
+                queries_today_query = """
+                    SELECT COUNT(*) as count FROM query_analytics 
+                    WHERE user_id = :user_id 
+                    AND date(created_at) = date('now')
+                """
+                queries_today_result = await self.db_manager.execute_query("app", queries_today_query, {"user_id": user_id})
+                if queries_today_result.get("success") and queries_today_result.get("data"):
+                    queries_today = queries_today_result["data"][0].get("count", 0)
+            except Exception as e:
+                logger.debug(f"query_analytics table not available for today's queries: {str(e)}")
+                # Table might not exist yet, use default value
+                queries_today = 0
+            
+            # Calculate average tokens per query
+            average_tokens_per_query = 0.0
+            if total_queries > 0:
+                average_tokens_per_query = round(user_token_usage / total_queries, 2)
+            
+            return {
+                "user_token_usage": user_token_usage,
+                "total_queries": total_queries,
+                "queries_today": queries_today,
+                "average_tokens_per_query": average_tokens_per_query
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting token usage stats for user {user_id}: {str(e)}")
+            # Return default values on error
+            return {
+                "user_token_usage": 0,
+                "total_queries": 0,
+                "queries_today": 0,
+                "average_tokens_per_query": 0.0
+            }
 
 # Permission checking decorators
 def require_role(required_role: UserRole):
