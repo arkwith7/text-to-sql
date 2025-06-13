@@ -8,9 +8,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app.database.connection_manager import DatabaseManager
-from app.database.models import Base, ChatSession, ChatMessage
-from app.config import get_settings
+from database.connection_manager import DatabaseManager
+from models.models import Base, ChatSession, ChatMessage
+from core.config import get_settings
 import asyncio
 
 async def create_chat_tables():

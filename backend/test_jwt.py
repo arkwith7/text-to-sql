@@ -8,9 +8,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import asyncio
 import json
-from app.auth.service import AuthService, UserCreate, UserLogin
-from app.database.connection_manager import DatabaseManager
-from app.analytics.service import AnalyticsService
+from services.auth_service import AuthService, UserCreate, UserLogin
+from database.connection_manager import DatabaseManager
+from services.analytics_service import AnalyticsService
 
 async def test_jwt_auth():
     """Test JWT authentication system."""

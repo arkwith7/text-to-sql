@@ -26,16 +26,16 @@ import uvicorn
 
 # Application imports
 # Ensure models are registered with Base before other components use it
-from app.database import models
-from app.config import get_settings, validate_settings
-from app.database.connection_manager import DatabaseManager
-from app.agents.sql_agent import SQLAgent
-from app.auth.service import AuthService
-from app.auth.security import get_openapi_security_schemes
-from app.analytics.service import AnalyticsService
-from app.chat.service import ChatSessionService
-from app.utils.cache import cache
-from app.api.v1.api import api_router
+from models import models
+from core.config import get_settings, validate_settings
+from database.connection_manager import DatabaseManager
+from core.agents.sql_agent import SQLAgent
+from services.auth_service import AuthService
+from services.auth_security import get_openapi_security_schemes
+from services.analytics_service import AnalyticsService
+from services.chat_service import ChatSessionService
+from utils.cache import cache
+from api.v1.api import api_router
 
 # Configure logging
 logging.basicConfig(
