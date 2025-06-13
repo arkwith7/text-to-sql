@@ -49,3 +49,6 @@ mypy==1.7.1
 # Additional utilities
 click==8.1.7
 asyncio-throttle==1.0.2
+
+# Jupyter Notebook
+ipykernel
