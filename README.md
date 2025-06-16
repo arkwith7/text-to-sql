@@ -99,10 +99,12 @@ Use the helper script to manage the PostgreSQL container:
 ./db-helper.sh status
 
 # Start/stop
+
 ./db-helper.sh start
 ./db-helper.sh stop
 
 # Create or remove the database
+
 ./db-helper.sh create
 ./db-helper.sh remove
 ```

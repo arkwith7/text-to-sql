@@ -42,7 +42,7 @@
 # 🔗 연관 스크립트:
 #   - setup-northwind.sh: PostgreSQL 초기 데이터 설정
 #   - db-helper.sh: 데이터베이스 컨테이너 관리
-#   - start-existing-db.sh: 전체 애플리케이션 스택
+#   - start-app.sh: 전체 애플리케이션 스택
 #
 # 💡 개발 워크플로우:
 #   1. 최초 실행: 모든 서비스 자동 설정 및 시작
