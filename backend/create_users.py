@@ -6,22 +6,28 @@ from uuid import uuid4
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Import models to ensure they are registered with SQLAlchemy's Base metadata
-from backend.app.database import models
-from backend.app.database.connection_manager import db_manager
-from backend.app.auth.service import AuthService, UserCreate, UserRole
-from backend.app.analytics.service import AnalyticsService
-from backend.app.config import settings
+# Import models and services using current package structure
+from models import models  # SQLAlchemy models
+from database.connection_manager import DatabaseManager  # Database manager
+from services.auth_service import AuthService, UserRole, UserCreate  # Authentication service with user types
+from services.analytics_service import AnalyticsService  # Analytics service
+from core.config import get_settings  # Configuration settings
+
+# Import types for async operations
+from typing import Optional
 
 async def create_users():
     """
     Connects to the database and creates a regular user and an admin user.
     """
     print("Initializing database manager...")
-    # The settings need to be configured before db_manager is initialized
-    # In a normal app flow, this happens automatically via FastAPI startup.
-    # Here, we do it manually.
-    settings.app_database_url = os.environ.get("APP_DATABASE_URL", "sqlite:///./text_to_sql.db")
+    # Get settings and initialize database manager
+    settings = get_settings()
+    db_manager = DatabaseManager()
+    
+    # Set database URL if not already configured
+    if not hasattr(settings, 'app_database_url') or not settings.app_database_url:
+        settings.app_database_url = os.environ.get("APP_DATABASE_URL", "sqlite:///../app_data.db")
     
     await db_manager.initialize()
     auth_service = AuthService(db_manager)

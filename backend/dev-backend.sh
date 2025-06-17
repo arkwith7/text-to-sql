@@ -88,22 +88,22 @@ parse_redis_url() {
     fi
 }
 
-# Check if .env file exists
-if [ ! -f .env ]; then
-    echo "⚠️  .env file not found. Copying from .env.example..."
-    if [ -f .env.example ]; then
-        cp .env.example .env
-        echo "📝 Please edit .env file with your Azure OpenAI credentials before continuing."
+# Check if .env file exists in project root
+if [ ! -f "../.env" ]; then
+    echo "⚠️  .env file not found at ../.env. Copying from .env.example..."
+    if [ -f "../.env.example" ]; then
+        cp "../.env.example" "../.env"
+        echo "📝 Please edit ../.env file with your Azure OpenAI credentials before continuing."
     else
-        echo "❌ .env.example file not found. Please create .env file manually."
+        echo "❌ .env.example file not found. Please create ../.env file manually."
     fi
     exit 1
 fi
 
 # Source environment variables
-echo "📋 Loading environment variables from .env..."
+echo "📋 Loading environment variables from ../.env..."
 set -a  # automatically export all variables
-source .env
+source "../.env"
 set +a
 
 # Check if required environment variables are set

@@ -103,7 +103,7 @@ npm run dev
 - **⚡ 중복 방지**: 이미 초기화된 데이터베이스는 건너뛰어 빠른 시작
 - **🔄 모든 시나리오 지원**: 
   - 새 컨테이너 생성 시
-  - 기존 중지된 컨테이너 재시작 시  
+  - 기존 중지된 컨테이너 재시작 시
   - 이미 실행 중인 컨테이너 확인 시
 
 이를 통해 개발자는 데이터베이스 상태에 관계없이 항상 일관된 Northwind 데이터셋으로 작업할 수 있습니다.
@@ -274,17 +274,15 @@ The smart scripts automatically handle most PostgreSQL scenarios, but here are m
    docker-compose down
    ./start-existing-db.sh
    ```
-
 2. **Northwind 데이터베이스 수동 초기화**
 
    ```bash
    # 컨테이너가 실행 중인 상태에서
    docker exec -i northwind-postgres psql -U postgres -d northwind < ./postgre/northwind.sql
-   
+
    # 또는 dev-backend.sh를 다시 실행 (자동으로 체크 및 초기화)
    ./dev-backend.sh
    ```
-
 3. **Port 5432 already in use**
 
    ```bash

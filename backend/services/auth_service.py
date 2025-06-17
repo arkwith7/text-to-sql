@@ -26,6 +26,7 @@ import asyncio
 from core.config import get_settings
 from database.connection_manager import DatabaseManager
 from services.analytics_service import AnalyticsService, EventType
+from utils.logging_config import AuthLogger
 
 logger = logging.getLogger(__name__)
 

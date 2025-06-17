@@ -1,0 +1,101 @@
+{
+  "function_tools_implementation": {
+    "status": "success",
+    "tools_count": 4,
+    "tools_info": {
+      "get_database_schema": {
+        "has_tool_decorator": true,
+        "description": "get_database_schema(database_name: str = 'northwind') -> str - 데이터베이스 스키마 정보를 조회합니다.\n\nArgs:\n    database_name: 조회할 데이터베이스 이름 (기본값: northwind)\n\nReturns:\n    스키마 정보를 포함한 JSON 문자열",
+        "args_schema": "{'database_name': {'title': 'Database Name', 'default': 'northwind', 'type': 'string'}}",
+        "callable": true
+      },
+      "generate_sql_from_question": {
+        "has_tool_decorator": true,
+        "description": "generate_sql_from_question(question: str) -> str - 자연어 질문을 SQL 쿼리로 변환합니다.\n\nArgs:\n    question: 자연어 질문\n\nReturns:\n    생성된 SQL 쿼리와 설명을 포함한 JSON 문자열",
+        "args_schema": "{'question': {'title': 'Question', 'type': 'string'}}",
+        "callable": true
+      },
+      "execute_sql_query_sync": {
+        "has_tool_decorator": true,
+        "description": "execute_sql_query_sync(sql_query: str) -> str - SQL 쿼리를 실행하고 결과를 반환합니다 (동기 버전).\n\nArgs:\n    sql_query: 실행할 SQL 쿼리\n\nReturns:\n    쿼리 실행 결과를 포함한 JSON 문자열",
+        "args_schema": "{'sql_query': {'title': 'Sql Query', 'type': 'string'}}",
+        "callable": true
+      },
+      "validate_sql_query": {
+        "has_tool_decorator": true,
+        "description": "validate_sql_query(sql_query: str, database: str = 'northwind') -> str - SQL 쿼리를 검증합니다.\n\nArgs:\n    sql_query: 검증할 SQL 쿼리\n    database: 대상 데이터베이스 이름\n\nReturns:\n    검증 결과를 포함한 JSON 문자열",
+        "args_schema": "{'sql_query': {'title': 'Sql Query', 'type': 'string'}, 'database': {'title': 'Database', 'default': 'northwind', 'type': 'string'}}",
+        "callable": true
+      }
+    }
+  },
+  "tool_decorator_usage": {
+    "status": "success",
+    "setup_function": "available",
+    "tools_count": 4,
+    "descriptions_count": 4,
+    "agent_compatibility": "available"
+  },
+  "agent_integration": {
+    "status": "success",
+    "agent_info": {
+      "agent_type": "LangChain OpenAI Functions",
+      "model": "gpt-4o-mini",
+      "api_version": "2025-01-01-preview",
+      "tools_count": 4,
+      "tools": [
+        "get_database_schema",
+        "generate_sql_from_question",
+        "execute_sql_query_sync",
+        "validate_sql_query"
+      ],
+      "simulation_mode": true,
+      "max_iterations": 5,
+      "database": "PostgreSQL Northwind",
+      "supported_languages": [
+        "Korean",
+        "English"
+      ],
+      "initialization_status": "완료"
+    },
+    "initialization": "successful"
+  },
+  "notebook_pattern_compliance": {
+    "status": "success",
+    "patterns": {
+      "azure_openai_integration": true,
+      "function_tools_definition": true,
+      "agent_executor_pattern": true,
+      "invoke_method_usage": true,
+      "system_prompt_structure": true,
+      "simulation_mode_support": true
+    },
+    "compliance_score": 100.0
+  },
+  "overall_status": {
+    "status": "success",
+    "test_results": {
+      "schema_query": {
+        "success": true,
+        "tables_count": 8,
+        "has_relationships": true
+      },
+      "sql_generation": {
+        "success": true,
+        "has_sql": true,
+        "has_explanation": true
+      },
+      "sql_execution": {
+        "success": true,
+        "simulation_mode": true,
+        "has_results": true
+      },
+      "agent_workflow": {
+        "success": true,
+        "has_answer": true,
+        "execution_time": 3.3954784870147705
+      }
+    },
+    "functional_tests_passed": 4
+  }
+}

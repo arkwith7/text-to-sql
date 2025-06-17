@@ -188,7 +188,7 @@ class SQLExecutionTool:
                 return [{"count": 0}]
             
             # SELECT 쿼리 처리
-            elif sql_upper.startswith("SELECT"):
+            if sql_upper.startswith("SELECT"):
                 # 테이블별 샘플 데이터 반환
                 for table_name, table_data in self.simulation_data.items():
                     if table_name.upper() in sql_upper:
@@ -208,11 +208,7 @@ class SQLExecutionTool:
                 # 기본 결과
                 return [{"message": "쿼리가 성공적으로 시뮬레이션되었습니다."}]
             
-            # INSERT, UPDATE, DELETE 쿼리
-            elif any(keyword in sql_upper for keyword in ["INSERT", "UPDATE", "DELETE"]):
-                return [{"affected_rows": 1, "message": "쿼리가 성공적으로 시뮬레이션되었습니다."}]
-            
-            # 기타 쿼리
+            # EXPLAIN 또는 기타 읽기 전용 쿼리
             else:
                 return [{"message": "쿼리가 성공적으로 시뮬레이션되었습니다."}]
                 
@@ -276,25 +272,25 @@ class SQLExecutionTool:
                     "suggestions": ["유효한 SQL 쿼리를 입력하세요."]
                 }
             
-            # 위험한 키워드 검사
-            dangerous_keywords = ["DROP", "TRUNCATE", "DELETE FROM", "ALTER", "CREATE", "GRANT", "REVOKE"]
+            # 위험한 키워드 검사 - Text-to-SQL AI Agent는 읽기 전용만 허용
+            dangerous_keywords = ["DROP", "TRUNCATE", "DELETE", "ALTER", "CREATE", "GRANT", "REVOKE", "INSERT", "UPDATE"]
             sql_upper = sql_query.upper()
             
             for keyword in dangerous_keywords:
                 if keyword in sql_upper:
                     return {
                         "is_valid": False,
-                        "error_message": f"위험한 키워드가 포함되어 있습니다: {keyword}",
-                        "suggestions": ["SELECT, INSERT, UPDATE 쿼리만 허용됩니다."]
+                        "error_message": f"위험한 키워드가 포함되어 있습니다: {keyword}. Text-to-SQL AI Agent는 읽기 전용(SELECT)만 허용됩니다.",
+                        "suggestions": ["SELECT 쿼리만 허용됩니다. 데이터 조회용으로만 사용하세요."]
                     }
             
-            # 허용된 키워드 검사
-            allowed_keywords = ["SELECT", "INSERT", "UPDATE", "WITH", "EXPLAIN"]
+            # 허용된 키워드 검사 - 읽기 전용 작업만 허용
+            allowed_keywords = ["SELECT", "WITH", "EXPLAIN"]
             if not any(keyword in sql_upper for keyword in allowed_keywords):
                 return {
                     "is_valid": False,
-                    "error_message": "허용되지 않는 SQL 문입니다.",
-                    "suggestions": ["SELECT, INSERT, UPDATE 쿼리만 허용됩니다."]
+                    "error_message": "허용되지 않는 SQL 문입니다. Text-to-SQL AI Agent는 읽기 전용만 허용됩니다.",
+                    "suggestions": ["SELECT 쿼리만 허용됩니다. 데이터 조회용으로만 사용하세요."]
                 }
             
             # 기본 구문 검사

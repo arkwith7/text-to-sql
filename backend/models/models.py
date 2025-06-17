@@ -52,6 +52,7 @@ class RefreshToken(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_revoked = Column(Boolean, default=False, nullable=False)
     device_info = Column(JSON, nullable=True)  # Store device/browser info
     
     user = relationship("User")
