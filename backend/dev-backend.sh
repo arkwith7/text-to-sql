@@ -147,6 +147,27 @@ if docker ps --format "{{.Names}}" | grep -q "^${POSTGRES_CONTAINER_NAME}$"; the
     echo "🔗 Testing PostgreSQL connection..."
     if docker exec $POSTGRES_CONTAINER_NAME pg_isready -h localhost -p 5432 -U postgres > /dev/null 2>&1; then
         echo "✅ PostgreSQL connection test successful"
+        
+        # Check if Northwind database needs initialization
+        echo "🗄️  Checking if Northwind database needs initialization..."
+        
+        # Check if Northwind tables exist (checking for customers table as indicator)
+        echo "🔍 Checking if Northwind data already exists..."
+        TABLE_COUNT=$(docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'customers';" 2>/dev/null | tr -d ' \n' || echo "0")
+        
+        if [ "$TABLE_COUNT" -gt 0 ]; then
+            echo "✅ Northwind database already initialized (found existing tables)"
+        else
+            echo "📥 Northwind database not found, initializing with sample data..."
+            if [ -f "../postgre/northwind.sql" ]; then
+                echo "📂 Loading Northwind data from ../postgre/northwind.sql..."
+                docker exec -i $POSTGRES_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME < ../postgre/northwind.sql
+                echo "✅ Northwind data loaded successfully"
+            else
+                echo "⚠️  Northwind SQL file not found at ../postgre/northwind.sql"
+                echo "   Please ensure the file exists at /home/wjadmin/Dev/text-to-sql/postgre/northwind.sql"
+            fi
+        fi
     else
         echo "⚠️  PostgreSQL container is running but not ready. Waiting..."
         sleep 5
@@ -168,6 +189,27 @@ elif docker ps -a --format "{{.Names}}" | grep -q "^${POSTGRES_CONTAINER_NAME}$"
         echo "   Attempt $i/30: PostgreSQL not ready yet..."
         sleep 2
     done
+    
+    # Check if Northwind database needs initialization
+    echo "🗄️  Checking if Northwind database needs initialization..."
+    
+    # Check if Northwind tables exist (checking for customers table as indicator)
+    echo "🔍 Checking if Northwind data already exists..."
+    TABLE_COUNT=$(docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'customers';" 2>/dev/null | tr -d ' \n' || echo "0")
+    
+    if [ "$TABLE_COUNT" -gt 0 ]; then
+        echo "✅ Northwind database already initialized (found existing tables)"
+    else
+        echo "📥 Northwind database not found, initializing with sample data..."
+        if [ -f "../postgre/northwind.sql" ]; then
+            echo "📂 Loading Northwind data from ../postgre/northwind.sql..."
+            docker exec -i $POSTGRES_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME < ../postgre/northwind.sql
+            echo "✅ Northwind data loaded successfully"
+        else
+            echo "⚠️  Northwind SQL file not found at ../postgre/northwind.sql"
+            echo "   Please ensure the file exists at /home/wjadmin/Dev/text-to-sql/postgre/northwind.sql"
+        fi
+    fi
     
 else
     echo "🚀 PostgreSQL container not found. Creating and starting a new one..."
@@ -198,12 +240,23 @@ else
     
     # Initialize Northwind database if needed
     echo "🗄️  Checking if Northwind database needs initialization..."
-    if [ -f "database/northwind.sql" ]; then
-        echo "📥 Loading Northwind sample data..."
-        docker exec -i $POSTGRES_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME < database/northwind.sql
-        echo "✅ Northwind data loaded"
+    
+    # Check if Northwind tables exist (checking for customers table as indicator)
+    echo "🔍 Checking if Northwind data already exists..."
+    TABLE_COUNT=$(docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'customers';" 2>/dev/null | tr -d ' \n' || echo "0")
+    
+    if [ "$TABLE_COUNT" -gt 0 ]; then
+        echo "✅ Northwind database already initialized (found existing tables)"
     else
-        echo "⚠️  Northwind SQL file not found at database/northwind.sql"
+        echo "📥 Northwind database not found, initializing with sample data..."
+        if [ -f "../postgre/northwind.sql" ]; then
+            echo "� Loading Northwind data from ../postgre/northwind.sql..."
+            docker exec -i $POSTGRES_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME < ../postgre/northwind.sql
+            echo "✅ Northwind data loaded successfully"
+        else
+            echo "⚠️  Northwind SQL file not found at ../postgre/northwind.sql"
+            echo "   Please ensure the file exists at /home/wjadmin/Dev/text-to-sql/postgre/northwind.sql"
+        fi
     fi
 fi
 

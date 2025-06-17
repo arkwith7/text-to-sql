@@ -80,6 +80,7 @@ For active development with hot-reloading:
 
 **1. Backend (Terminal 1)**
 ```bash
+# 스마트 Northwind DB 체크 및 자동 초기화 포함
 ./dev-backend.sh
 ```
 
@@ -90,6 +91,22 @@ npm run dev
 ```
 
 > The backend runs on `http://localhost:8000` and the frontend on `http://localhost:3000`.
+
+### 🛠️ Development Scripts 개선사항
+
+#### dev-backend.sh 스마트 기능
+
+`dev-backend.sh` 스크립트는 다음과 같은 지능형 데이터베이스 관리 기능을 제공합니다:
+
+- **🔍 Northwind DB 자동 감지**: PostgreSQL 컨테이너 시작 시 Northwind 테이블 존재 여부 자동 확인
+- **📥 조건부 데이터 로드**: Northwind 테이블이 없는 경우에만 `/postgre/northwind.sql`에서 데이터 자동 로드
+- **⚡ 중복 방지**: 이미 초기화된 데이터베이스는 건너뛰어 빠른 시작
+- **🔄 모든 시나리오 지원**: 
+  - 새 컨테이너 생성 시
+  - 기존 중지된 컨테이너 재시작 시  
+  - 이미 실행 중인 컨테이너 확인 시
+
+이를 통해 개발자는 데이터베이스 상태에 관계없이 항상 일관된 Northwind 데이터셋으로 작업할 수 있습니다.
 
 ### Database Management
 
@@ -257,7 +274,18 @@ The smart scripts automatically handle most PostgreSQL scenarios, but here are m
    docker-compose down
    ./start-existing-db.sh
    ```
-2. **Port 5432 already in use**
+
+2. **Northwind 데이터베이스 수동 초기화**
+
+   ```bash
+   # 컨테이너가 실행 중인 상태에서
+   docker exec -i northwind-postgres psql -U postgres -d northwind < ./postgre/northwind.sql
+   
+   # 또는 dev-backend.sh를 다시 실행 (자동으로 체크 및 초기화)
+   ./dev-backend.sh
+   ```
+
+3. **Port 5432 already in use**
 
    ```bash
    # Check what's using the port
@@ -266,11 +294,11 @@ The smart scripts automatically handle most PostgreSQL scenarios, but here are m
    # Or stop conflicting containers
    docker stop $(docker ps -q --filter "publish=5432")
    ```
-3. **Azure OpenAI API errors**
+4. **Azure OpenAI API errors**
    - Verify your API key and endpoint in `.env`
    - Check deployment name matches your Azure setup
    - Ensure you have sufficient quota
-4. **Frontend build errors**
+5. **Frontend build errors**
 
    ```bash
    # Clear node modules and reinstall
@@ -278,7 +306,7 @@ The smart scripts automatically handle most PostgreSQL scenarios, but here are m
    rm -rf node_modules package-lock.json
    npm install
    ```
-5. **Backend dependency errors**
+6. **Backend dependency errors**
 
    ```bash
    # Rebuild backend container
@@ -313,8 +341,8 @@ docker-compose logs -f
 # Test database connection from host
 docker exec northwind-postgres psql -U postgres -d northwind -c "SELECT COUNT(*) FROM customers;"
 
-# Import Northwind data manually if needed
-docker exec -i northwind-postgres psql -U postgres < ./postgre/northwind.sql
+# Import Northwind data manually if needed (하지만 dev-backend.sh가 자동으로 처리)
+docker exec -i northwind-postgres psql -U postgres -d northwind < ./postgre/northwind.sql
 
 # Access database shell
 docker exec -it northwind-postgres psql -U postgres -d northwind
