@@ -86,6 +86,30 @@ def generate_sql_from_question(question: str) -> str:
             r'고객\s*수': ('SELECT COUNT(*) as customer_count FROM customers', '데이터베이스의 총 고객 수를 계산합니다.'),
             r'제품\s*수': ('SELECT COUNT(*) as product_count FROM products', '데이터베이스의 총 제품 수를 계산합니다.'),
             r'주문\s*수': ('SELECT COUNT(*) as order_count FROM orders', '데이터베이스의 총 주문 수를 계산합니다.'),
+            r'(\d{4})년.*월별.*매출': (
+                '''SELECT 
+                    EXTRACT(MONTH FROM o.orderdate) as month,
+                    ROUND(SUM(od.quantity * od.price * (1 - od.discount)), 2) as total_sales
+                FROM orders o 
+                JOIN order_details od ON o.orderid = od.orderid 
+                WHERE EXTRACT(YEAR FROM o.orderdate) = {}
+                GROUP BY EXTRACT(MONTH FROM o.orderdate)
+                ORDER BY month''',
+                '지정된 연도의 월별 매출을 계산합니다.'
+            ),
+            r'매출.*현황|매출.*분석': (
+                '''SELECT 
+                    EXTRACT(YEAR FROM o.orderdate) as year,
+                    EXTRACT(MONTH FROM o.orderdate) as month,
+                    ROUND(SUM(od.quantity * od.price * (1 - od.discount)), 2) as total_sales,
+                    COUNT(DISTINCT o.orderid) as order_count
+                FROM orders o 
+                JOIN order_details od ON o.orderid = od.orderid 
+                GROUP BY EXTRACT(YEAR FROM o.orderdate), EXTRACT(MONTH FROM o.orderdate)
+                ORDER BY year DESC, month DESC
+                LIMIT 12''',
+                '최근 12개월의 매출 현황을 분석합니다.'
+            ),
             r'카테고리별\s*제품': (
                 'SELECT c.categoryname, COUNT(p.productid) as product_count FROM categories c LEFT JOIN products p ON c.categoryid = p.categoryid GROUP BY c.categoryname ORDER BY product_count DESC',
                 '카테고리별 제품 수를 계산합니다.'
@@ -141,7 +165,9 @@ def generate_sql_from_question(question: str) -> str:
             "suggestions": [
                 "고객 수를 알려주세요",
                 "제품 수는 몇 개인가요?",
-                "카테고리별 제품 수를 보여주세요"
+                "카테고리별 제품 수를 보여주세요",
+                "1997년 월별 매출 현황을 보여주세요",
+                "매출 분석을 해주세요"
             ]
         }, ensure_ascii=False, indent=2)
         
@@ -173,17 +199,51 @@ def execute_sql_query_sync(sql_query: str) -> str:
                 "suggestion": "setup_langchain_tools()를 먼저 호출하세요."
             }, ensure_ascii=False)
         
-        # 시뮬레이션 모드로 실행 (동기 버전)
-        results = _sql_executor._execute_simulated_query(sql_query, "northwind")
+        # 실제 SQL 실행 (시뮬레이션 모드가 활성화된 경우만 시뮬레이션 사용)
+        if _sql_executor.enable_simulation:
+            results = _sql_executor._execute_simulated_query(sql_query, "northwind")
+            simulation_used = True
+        else:
+            # 실제 데이터베이스에서 실행
+            import asyncio
+            
+            # 비동기 메서드를 동기적으로 실행
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            if loop.is_running():
+                # 이미 실행 중인 루프가 있는 경우 태스크 생성
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        lambda: asyncio.run(_sql_executor.execute_query(sql_query, "northwind"))
+                    )
+                    execution_result = future.result()
+            else:
+                execution_result = loop.run_until_complete(
+                    _sql_executor.execute_query(sql_query, "northwind")
+                )
+            
+            if execution_result.get('success'):
+                results = execution_result.get('results', [])
+                simulation_used = False
+            else:
+                # 실제 실행 실패 시 시뮬레이션으로 대체
+                results = _sql_executor._execute_simulated_query(sql_query, "northwind")
+                simulation_used = True
+                logger.warning(f"실제 SQL 실행 실패, 시뮬레이션으로 대체: {execution_result.get('error')}")
         
-        logger.info(f"SQL 실행 성공 - 결과: {len(results)}행")
+        logger.info(f"SQL 실행 성공 - 결과: {len(results)}행 (시뮬레이션: {simulation_used})")
         
         return json.dumps({
             "success": True,
             "sql_query": sql_query,
             "results": results,
             "row_count": len(results),
-            "simulation_mode": True
+            "simulation_mode": simulation_used
         }, ensure_ascii=False, indent=2)
         
     except Exception as e:

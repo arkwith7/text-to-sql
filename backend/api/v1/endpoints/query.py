@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 import asyncio
 import logging
+import uuid
 
 from services.auth_dependencies import get_current_user
 from services.auth_service import UserResponse
@@ -208,15 +209,137 @@ async def execute_query(
     sql_agent: SQLAgent = request.app.state.sql_agent
     
     try:
-        # Execute the query using the SQL agent
-        result = await sql_agent.execute_query(
+        # Execute the query using the agent
+        result = sql_agent.execute_query(
             question=query_request.question,
             database=query_request.database,
             context=query_request.context,
-            user_id=current_user.id,
+            user_id=current_user.get("id"),
             include_explanation=query_request.include_explanation,
+            include_debug_info=True,  # 중간 단계 정보 포함
             max_rows=query_request.max_rows
         )
+        
+        # 디버그: LangChain Agent 응답 구조 확인
+        logger.info(f"🔍 LangChain Agent 응답 키: {list(result.keys())}")
+        if "debug_info" in result:
+            debug_info = result["debug_info"]
+            logger.info(f"🔍 Debug info 키: {list(debug_info.keys())}")
+            if "intermediate_steps" in debug_info:
+                steps = debug_info["intermediate_steps"]
+                logger.info(f"🔍 Intermediate steps 수: {len(steps)}")
+                for i, step in enumerate(steps):
+                    logger.info(f"🔍 Step {i}: {type(step)}")
+                    if isinstance(step, tuple) and len(step) >= 2:
+                        action, observation = step[0], step[1]
+                        logger.info(f"🔍 Action: {type(action)} - {action}")
+                        logger.info(f"🔍 Observation (first 200 chars): {str(observation)[:200]}...")
+                        
+                        # 더 세부적인 action 정보
+                        if hasattr(action, 'tool'):
+                            logger.info(f"🔧 Tool name: {action.tool}")
+                        if hasattr(action, 'tool_input'):
+                            logger.info(f"🔧 Tool input: {action.tool_input}")
+                    else:
+                        logger.info(f"🔍 Full step: {step}")
+        
+        # LangChain Agent 응답을 SQL Agent 형식으로 변환
+        if "answer" in result and "sql_query" not in result:
+            # LangChain Agent 응답 변환
+            sql_query = ""
+            results = []
+            
+            # debug_info에서 intermediate_steps 확인
+            debug_info = result.get("debug_info", {})
+            intermediate_steps = debug_info.get("intermediate_steps", [])
+            
+            # intermediate_steps에서 SQL과 결과 추출
+            for step in intermediate_steps:
+                if isinstance(step, tuple) and len(step) >= 2:
+                    action, observation = step[0], step[1]
+                    
+                    # 도구 이름 확인
+                    tool_name = ""
+                    if hasattr(action, 'tool'):
+                        tool_name = str(action.tool)
+                    
+                    logger.info(f"🛠️ Processing tool: {tool_name}")
+                    
+                    # SQL 생성 도구 결과 처리
+                    if 'generate_sql_from_question' in tool_name:
+                        try:
+                            import json
+                            if isinstance(observation, str):
+                                sql_data = json.loads(observation)
+                                if "sql_query" in sql_data:
+                                    sql_query = sql_data["sql_query"]
+                                    logger.info(f"✅ SQL 추출 성공: {sql_query}")
+                        except Exception as e:
+                            logger.error(f"❌ SQL 추출 실패: {e}")
+                    
+                    # SQL 실행 도구 결과 처리
+                    elif 'execute_sql_query' in tool_name:
+                        try:
+                            import json
+                            if isinstance(observation, str):
+                                exec_data = json.loads(observation)
+                                if "results" in exec_data and exec_data.get("success"):
+                                    results = exec_data["results"]
+                                    logger.info(f"✅ 결과 추출 성공: {len(results)}행")
+                            elif isinstance(observation, list):
+                                results = observation
+                                logger.info(f"✅ 직접 결과 추출: {len(results)}행")
+                        except Exception as e:
+                            logger.error(f"❌ 결과 추출 실패: {e}")
+                            # 텍스트 결과를 dict로 변환
+                            if isinstance(observation, str) and observation.strip():
+                                results = [{"result": observation}]
+                                logger.info(f"📝 텍스트 결과 변환: {len(results)}행")
+            
+            # Agent의 답변에서 SQL 추출 (fallback)
+            answer = result.get("answer", "")
+            if not sql_query and "```sql" in answer:
+                try:
+                    sql_start = answer.find("```sql") + 6
+                    sql_end = answer.find("```", sql_start)
+                    if sql_end > sql_start:
+                        sql_query = answer[sql_start:sql_end].strip()
+                except:
+                    pass
+            
+            # 결과 변환
+            result = {
+                "success": result.get("success", True),
+                "question": query_request.question,
+                "sql_query": sql_query,
+                "results": results,
+                "answer": answer,  # 원본 답변 유지
+                "explanation": answer if query_request.include_explanation else None,
+                "execution_time": result.get("execution_time", 0),
+                "agent_type": result.get("agent_type", "langchain"),
+                "model": result.get("model", "unknown")
+            }
+        
+        # Token usage tracking이 활성화된 경우 analytics에 기록
+        if hasattr(request.app.state, 'analytics_service'):
+            analytics_service = request.app.state.analytics_service
+            
+            # 토큰 사용량 정보가 결과에 포함된 경우 기록
+            if "token_usage" in result:
+                token_usage = result["token_usage"]
+                
+                # Analytics service를 통해 쿼리 실행 기록
+                await analytics_service.log_query_execution(
+                    query_id=str(uuid.uuid4()),
+                    user_id=current_user.get("id"),
+                    question=query_request.question,
+                    sql_query=result.get("sql_query", ""),
+                    execution_time=result["execution_time"],
+                    row_count=len(result.get("results", [])),
+                    success=True,
+                    error_message=None,
+                    chart_type=None
+                )
         
         return QueryResponse(
             question=query_request.question,
@@ -231,6 +354,23 @@ async def execute_query(
         
     except Exception as e:
         logger.error(f"Query execution failed: {str(e)}")
+        
+        # 실패한 쿼리도 analytics에 기록 (토큰 사용량은 0으로)
+        if hasattr(request.app.state, 'analytics_service'):
+            analytics_service = request.app.state.analytics_service
+            
+            await analytics_service.log_query_execution(
+                query_id=str(uuid.uuid4()),
+                user_id=current_user.get("id"),
+                question=query_request.question,
+                sql_query="",
+                execution_time=0.0,
+                row_count=0,
+                success=False,
+                error_message=str(e),
+                chart_type=None
+            )
+        
         return QueryResponse(
             question=query_request.question,
             sql_query="",
@@ -335,4 +475,4 @@ async def delete_query_from_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete query from history"
-        ) 
+        )

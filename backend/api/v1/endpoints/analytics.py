@@ -53,7 +53,7 @@ async def get_usage_analytics(
             start_date = end_date - timedelta(days=30)
         
         metrics = await analytics_service.get_user_usage_metrics(
-            user_id=current_user.id,
+            user_id=current_user.get("id"),
             start_date=start_date,
             end_date=end_date
         )
@@ -92,7 +92,7 @@ async def get_performance_analytics(
             start_date = end_date - timedelta(days=30)
         
         metrics = await analytics_service.get_user_performance_metrics(
-            user_id=current_user.id,
+            user_id=current_user.get("id"),
             start_date=start_date,
             end_date=end_date
         )
@@ -204,7 +204,7 @@ async def export_analytics(
             start_date = end_date - timedelta(days=30)
         
         data = await analytics_service.export_user_analytics(
-            user_id=current_user.id,
+            user_id=current_user.get("id"),
             start_date=start_date,
             end_date=end_date,
             format=format

@@ -282,7 +282,7 @@ class AuthService:
             await analytics_service.log_event(
                 event_type=event_type,
                 user_id=user_id,
-                metadata={"email": email}
+                event_data={"email": email}
             )
         except Exception as e:
             logger.error(f"Error logging auth event: {str(e)}")

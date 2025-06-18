@@ -376,3 +376,14 @@ async def execute_business_query(query: str, params: Optional[Dict] = None) -> D
 async def get_business_schema() -> List[Dict[str, Any]]:
     """Get business database schema for AI context"""
     return await db_manager.get_schema_info('northwind')
+
+
+# FastAPI dependency functions
+async def get_db_manager() -> DatabaseManager:
+    """Get database manager instance for FastAPI dependency injection"""
+    return db_manager
+
+async def get_db_session(database: str = "app"):
+    """Get database session for FastAPI dependency injection"""
+    async with db_manager.get_session(database) as session:
+        yield session

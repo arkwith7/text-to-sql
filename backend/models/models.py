@@ -36,6 +36,7 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
     last_login = Column(DateTime(timezone=True), nullable=True)
     token_usage = Column(Integer, default=0, nullable=False)
+    preferences = Column(JSON, nullable=True)  # User preferences including token usage summary
     
     def __repr__(self):
         return f"<User(id='{self.id}', email='{self.email}', role='{self.role}')>"
@@ -75,13 +76,21 @@ class QueryAnalytics(Base):
     success = Column(Boolean, nullable=False)
     error_message = Column(Text, nullable=True)
     chart_type = Column(String(50), nullable=True)
+    
+    # LLM Token Usage Tracking
+    prompt_tokens = Column(Integer, nullable=True, default=0)  # Input tokens used
+    completion_tokens = Column(Integer, nullable=True, default=0)  # Output tokens generated
+    total_tokens = Column(Integer, nullable=True, default=0)  # Total tokens consumed
+    llm_model = Column(String(100), nullable=True)  # Model used (e.g., gpt-4o, gpt-35-turbo)
+    llm_cost_estimate = Column(Float, nullable=True, default=0.0)  # Estimated cost in USD
+    
     timestamp = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
     
     user = relationship("User")
 
     def __repr__(self):
-        return f"<QueryAnalytics(id='{self.id}', user_id='{self.user_id}', success='{self.success}')>"
+        return f"<QueryAnalytics(id='{self.id}', user_id='{self.user_id}', success='{self.success}', total_tokens='{self.total_tokens}')>"
 
 class Event(Base):
     """General event tracking model."""

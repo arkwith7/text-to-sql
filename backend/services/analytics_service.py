@@ -98,10 +98,12 @@ class AnalyticsService:
             insert_query = """
             INSERT INTO query_analytics (
                 id, query_id, user_id, question, sql_query, execution_time,
-                row_count, success, error_message, chart_type
-            ) VALUES (:id, :query_id, :user_id, :question, :sql_query, :execution_time, :row_count, :success, :error_message, :chart_type)
+                row_count, success, error_message, chart_type, timestamp, created_at,
+                prompt_tokens, completion_tokens, total_tokens, llm_model, llm_cost_estimate
+            ) VALUES (:id, :query_id, :user_id, :question, :sql_query, :execution_time, :row_count, :success, :error_message, :chart_type, :timestamp, :created_at, :prompt_tokens, :completion_tokens, :total_tokens, :llm_model, :llm_cost_estimate)
             """
             
+            current_time = datetime.now(timezone.utc)
             params = {
                 "id": str(uuid.uuid4()),
                 "query_id": query_id,
@@ -112,7 +114,14 @@ class AnalyticsService:
                 "row_count": row_count,
                 "success": success,
                 "error_message": error_message,
-                "chart_type": chart_type
+                "chart_type": chart_type,
+                "timestamp": current_time,
+                "created_at": current_time,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "llm_model": None,
+                "llm_cost_estimate": 0.0
             }
 
             await self.db_manager.execute_query_safe(
@@ -120,6 +129,8 @@ class AnalyticsService:
                 params=params,
                 database_type="app"
             )
+            
+            logger.info(f"📊 Query analytics logged - ID: {query_id}, Success: {success}, Execution Time: {execution_time}ms, Row Count: {row_count}")
             
             # Also log as a general event
             await self.log_event(
@@ -716,3 +727,76 @@ class AnalyticsService:
         except Exception as e:
             logger.error(f"Error saving event to database: {str(e)}")
             # Don't raise exception to avoid breaking the main flow
+
+    async def log_query_execution_with_tokens(
+        self,
+        query_id: str,
+        user_id: str,
+        question: str,
+        sql_query: str,
+        execution_time: float,
+        row_count: int,
+        success: bool,
+        error_message: Optional[str] = None,
+        chart_type: Optional[str] = None,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
+        llm_model: Optional[str] = None,
+        llm_cost_estimate: float = 0.0
+    ):
+        """Log a query execution event with token usage information."""
+        try:
+            insert_query = """
+            INSERT INTO query_analytics (
+                id, query_id, user_id, question, sql_query, execution_time,
+                row_count, success, error_message, chart_type, timestamp, created_at,
+                prompt_tokens, completion_tokens, total_tokens, llm_model, llm_cost_estimate
+            ) VALUES (:id, :query_id, :user_id, :question, :sql_query, :execution_time, :row_count, :success, :error_message, :chart_type, :timestamp, :created_at, :prompt_tokens, :completion_tokens, :total_tokens, :llm_model, :llm_cost_estimate)
+            """
+            
+            current_time = datetime.now(timezone.utc)
+            params = {
+                "id": str(uuid.uuid4()),
+                "query_id": query_id,
+                "user_id": user_id,
+                "question": question,
+                "sql_query": sql_query,
+                "execution_time": execution_time,
+                "row_count": row_count,
+                "success": success,
+                "error_message": error_message,
+                "chart_type": chart_type,
+                "timestamp": current_time,
+                "created_at": current_time,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "llm_model": llm_model,
+                "llm_cost_estimate": llm_cost_estimate
+            }
+
+            await self.db_manager.execute_query_safe(
+                insert_query,
+                params=params,
+                database_type="app"
+            )
+            
+            logger.info(f"📊 Query analytics with tokens logged - ID: {query_id}, Tokens: {total_tokens}")
+            
+            # Also log as a general event
+            await self.log_event(
+                EventType.QUERY_EXECUTED,
+                user_id,
+                {
+                    "query_id": query_id,
+                    "success": success,
+                    "execution_time": execution_time,
+                    "row_count": row_count,
+                    "total_tokens": total_tokens,
+                    "llm_model": llm_model
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"Error logging query execution with tokens: {str(e)}")

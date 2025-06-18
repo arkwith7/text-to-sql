@@ -1,6 +1,6 @@
 """
 Chat endpoints for Text-to-SQL application.
-Enhanced with improved Core Module agents.
+Enhanced with improved Core Module agents and token usage tracking.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
@@ -16,6 +16,7 @@ import json
 from services.auth_dependencies import get_current_user
 from services.auth_service import UserResponse
 from services.chat_service import ChatSessionService
+from services.token_usage_service import TokenUsageService
 from utils.logging_config import ChatLogger, RequestLogger
 
 logger = logging.getLogger(__name__)
@@ -481,8 +482,8 @@ async def process_chat_query(
         try:
             # Agent 타입에 따른 실행 방식 선택
             if agent_used.startswith("langchain"):
-                # LangChain Agent 실행
-                result = selected_agent.execute_query(
+                # LangChain Agent 실행 (비동기)
+                result = await selected_agent.execute_query(
                     question=query_request.question,
                     user_id=str(user_id),
                     include_debug_info=False
@@ -490,9 +491,21 @@ async def process_chat_query(
                 
                 # LangChain 결과를 표준 형식으로 변환
                 if result.get('success'):
+                    # LangChain Agent에서 추출한 SQL 쿼리와 결과 사용
+                    sql_query = result.get('sql_query', '')
+                    sql_results = result.get('results', [])
+                    
+                    # SQL 쿼리가 없으면 기본 메시지 사용
+                    if not sql_query:
+                        sql_query = "LangChain Agent로 처리됨"
+                    
+                    # 결과가 없으면 답변만 포함
+                    if not sql_results:
+                        sql_results = [{"answer": result.get('answer', '')}]
+                    
                     converted_result = {
-                        'sql_query': "LangChain Agent로 처리됨",
-                        'results': [{"answer": result.get('answer', '')}],
+                        'sql_query': sql_query,
+                        'results': sql_results,
                         'explanation': result.get('answer', ''),
                         'success': True,
                         'agent_info': {
@@ -501,6 +514,18 @@ async def process_chat_query(
                             'execution_time': result.get('execution_time', 0)
                         }
                     }
+                    
+                    logger.info(
+                        f"🔧 LangChain 결과 변환 완료 - SQL: {sql_query[:50]}{'...' if len(sql_query) > 50 else ''}, 결과: {len(sql_results)}행",
+                        extra={
+                            'request_id': request_id,
+                            'session_id': session_id,
+                            'user_id': user_id,
+                            'original_sql': result.get('sql_query', 'N/A'),
+                            'original_results_count': len(result.get('results', [])),
+                            'converted_results_count': len(sql_results)
+                        }
+                    )
                 else:
                     converted_result = {
                         'sql_query': '',
@@ -513,8 +538,11 @@ async def process_chat_query(
                 
             else:
                 # Enhanced SQL Agent 실행 (동기/비동기 모두 지원)
-                if hasattr(selected_agent, 'execute_query_sync'):
-                    # 동기 실행 (더 빠름)
+                # LangChain Agent 인스턴스인지 확인
+                is_langchain_agent = type(selected_agent).__name__ == 'LangChainTextToSQLAgent'
+                
+                if hasattr(selected_agent, 'execute_query_sync') and not is_langchain_agent:
+                    # 동기 실행 (Enhanced SQL Agent용)
                     result = selected_agent.execute_query_sync(
                         question=query_request.question,
                         database="northwind",
@@ -522,7 +550,7 @@ async def process_chat_query(
                         max_rows=query_request.max_rows
                     )
                 else:
-                    # 비동기 실행 (기존 방식)
+                    # 비동기 실행 (LangChain Agent 또는 기존 방식)
                     result = await selected_agent.execute_query(
                         question=query_request.question,
                         database="northwind",
@@ -548,28 +576,20 @@ async def process_chat_query(
                 }
             )
             
-            # 어시스턴트 응답 생성
-            assistant_content = f"질문에 대한 답변을 찾았습니다:\n\n"
+            # 어시스턴트 응답 생성 - 순수한 AI 설명만 포함
+            assistant_content = ""
             
+            # AI의 답변/설명만 포함 (SQL과 결과는 별도 필드에 저장)
             if result.get('explanation'):
-                assistant_content += f"**설명:** {result['explanation']}\n\n"
-            
-            if result.get('sql_query'):
-                assistant_content += f"**SQL 쿼리:**\n```sql\n{result['sql_query']}\n```\n\n"
-            
-            results = result.get('results', [])
-            if results:
-                assistant_content += f"**결과:** {len(results)}개의 레코드를 찾았습니다\n"
-                if len(results) <= 5:
-                    assistant_content += "모든 결과:\n"
-                    for i, row in enumerate(results, 1):
-                        assistant_content += f"{i}. {str(row)}\n"
-                else:
-                    assistant_content += f"처음 3개 결과 (총 {len(results)}개 중):\n"
-                    for i, row in enumerate(results[:3], 1):
-                        assistant_content += f"{i}. {str(row)}\n"
+                assistant_content = result['explanation']
+            elif result.get('answer'):
+                assistant_content = result['answer']
             else:
-                assistant_content += "쿼리에 대한 결과를 찾지 못했습니다."
+                # 기본 메시지
+                if result.get('results') and len(result['results']) > 0:
+                    assistant_content = f"쿼리가 성공적으로 실행되어 {len(result['results'])}개의 결과를 찾았습니다."
+                else:
+                    assistant_content = "쿼리가 실행되었지만 결과를 찾지 못했습니다."
             
             # 어시스턴트 메시지 추가
             assistant_message_id = await chat_service.add_message(
@@ -746,7 +766,7 @@ async def test_agents(
                 result = await enhanced_sql_agent.execute_query(question, database="northwind", user_id=1)
                 
         elif agent_type == "langchain" and langchain_agent:
-            result = langchain_agent.execute_query(question, user_id="test_user")
+            result = await langchain_agent.execute_query(question, user_id="test_user")
             
         else:
             # 기본 PostgreSQL 스키마 테스트

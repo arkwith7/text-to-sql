@@ -107,6 +107,21 @@
           </button>
 
           <button
+            @click="activeTab = 'tokens'"
+            :class="[
+              'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+              activeTab === 'tokens' 
+                ? 'bg-blue-100 text-blue-700' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+              isCollapsed ? 'justify-center' : ''
+            ]"
+            :title="isCollapsed ? '토큰 사용량' : ''"
+          >
+            <Activity class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
+            <span v-if="!isCollapsed">토큰 사용량</span>
+          </button>
+
+          <button
             @click="activeTab = 'profile'"
             :class="[
               'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
@@ -165,6 +180,7 @@
                activeTab === 'history' ? '대화 기록' : 
                activeTab === 'saved' ? '저장된 쿼리' : 
                activeTab === 'database' ? '분석 데이터 정보' :
+               activeTab === 'tokens' ? '토큰 사용량' :
                activeTab === 'profile' ? '사용자 프로필' : '새로운 질문' }}
           </h2>
           
@@ -328,6 +344,13 @@
         </div>
       </div>
 
+      <!-- Token Usage Tab -->
+      <div v-else-if="activeTab === 'tokens'" class="flex-1 overflow-y-auto">
+        <div class="p-6">
+          <TokenUsageWidget />
+        </div>
+      </div>
+
       <!-- Profile Tab -->
       <div v-else-if="activeTab === 'profile'" class="flex-1 p-6 overflow-y-auto">
         <UserProfile />
@@ -360,7 +383,8 @@ import {
   Send,
   User,
   Menu,
-  Database
+  Database,
+  Activity
 } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
 import { useApi } from '@/composables/useApi';
@@ -369,6 +393,7 @@ import { useStreaming } from '@/composables/useStreaming';
 import ChatMessage from './ChatMessage.vue';
 import UserProfile from './UserProfile.vue';
 import DatabaseInfo from './DatabaseInfo.vue';
+import TokenUsageWidget from './TokenUsageWidget.vue';
 import StreamingProgress from './StreamingProgress.vue';
 import type { QueryResponse, ChatMessage as ApiChatMessage } from '@/types/api';
 
@@ -425,22 +450,72 @@ const messages = computed<UIMessage[]>(() => {
   const uiMessages: UIMessage[] = [];
   
   rawMessages.value.forEach((msg: any) => {
+    console.log('Processing message:', msg); // 디버깅용 로그 추가
+    
     // Each message from the API is already separated by type
+    const hasSQL = msg.sql_query && msg.sql_query.trim() !== '';
+    const hasResults = (msg.query_results || msg.query_result) && 
+                      ((Array.isArray(msg.query_results) && msg.query_results.length > 0) || 
+                       (Array.isArray(msg.query_result) && msg.query_result.length > 0) ||
+                       (typeof msg.query_results === 'string' && msg.query_results.trim() !== '[]') ||
+                       (typeof msg.query_result === 'string' && msg.query_result.trim() !== '[]'));
+    
+    console.log('SQL and Results check:', { hasSQL, hasResults, sql_query: msg.sql_query, query_results: msg.query_results, query_result: msg.query_result });
+    
     uiMessages.push({
       id: msg.id,
       type: msg.message_type as 'user' | 'assistant',
       content: msg.content,
-      timestamp: new Date(msg.created_at),
-      queryResult: msg.query_results ? {
-        sql_query: msg.sql_query,
-        data: msg.query_results,
-        columns: msg.query_results && msg.query_results.length > 0 ? Object.keys(msg.query_results[0]) : [],
-        execution_time: 0, // Not available in message structure
-        row_count: Array.isArray(msg.query_results) ? msg.query_results.length : 0
+      timestamp: new Date(msg.timestamp || msg.created_at), // 두 필드 모두 시도
+      queryResult: (hasSQL || hasResults) ? {
+        sql_query: msg.sql_query || '',
+        data: (() => {
+          // query_results 또는 query_result 둘 다 시도
+          const results = msg.query_results || msg.query_result;
+          if (Array.isArray(results)) return results;
+          if (typeof results === 'string') {
+            try {
+              return JSON.parse(results);
+            } catch {
+              return [];
+            }
+          }
+          return [];
+        })(),
+        columns: (() => {
+          const results = msg.query_results || msg.query_result;
+          let data = [];
+          if (Array.isArray(results)) {
+            data = results;
+          } else if (typeof results === 'string') {
+            try {
+              data = JSON.parse(results);
+            } catch {
+              data = [];
+            }
+          }
+          return data && data.length > 0 ? Object.keys(data[0]) : [];
+        })(),
+        execution_time: msg.execution_time || 0,
+        row_count: (() => {
+          const results = msg.query_results || msg.query_result;
+          let data = [];
+          if (Array.isArray(results)) {
+            data = results;
+          } else if (typeof results === 'string') {
+            try {
+              data = JSON.parse(results);
+            } catch {
+              data = [];
+            }
+          }
+          return Array.isArray(data) ? data.length : 0;
+        })()
       } : undefined
     });
   });
   
+  console.log('Processed UI messages:', uiMessages); // 디버깅용 로그 추가
   return uiMessages;
 });
 

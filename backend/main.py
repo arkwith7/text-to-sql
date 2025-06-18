@@ -32,8 +32,20 @@ from models import models
 from core.config import get_settings, validate_settings
 from database.connection_manager import DatabaseManager
 
-# Enhanced Core Module imports (개선된 core 모듈)
-from core import SQLAgent, LangChainTextToSQLAgent
+# Enhanced Core Module imports (개선된 core 모듈) - 안전한 import 처리
+try:
+    from core import SQLAgent
+    _sql_agent_available = True
+except ImportError as e:
+    logger.warning(f"SQL Agent import 실패: {e}")
+    _sql_agent_available = False
+
+try:
+    from core import LangChainTextToSQLAgent
+    _langchain_agent_available = True
+except ImportError as e:
+    logger.warning(f"LangChain Agent import 실패: {e}")
+    _langchain_agent_available = False
 
 from services.auth_service import AuthService
 from services.auth_security import get_openapi_security_schemes
@@ -41,6 +53,7 @@ from services.analytics_service import AnalyticsService, EventType
 from services.chat_service import ChatSessionService
 from utils.cache import cache
 from api.v1.api import api_router
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -75,42 +88,61 @@ async def lifespan(app: FastAPI):
         app.state.chat_service = ChatSessionService(db_manager)
         logger.info("✅ 채팅 서비스 초기화 완료")
 
-        # Enhanced SQL Agent 초기화 (개선된 버전)
-        try:
-            enhanced_sql_agent = SQLAgent(db_manager)
-            app.state.sql_agent = enhanced_sql_agent
-            logger.info("✅ Enhanced SQL Agent 초기화 완료 (PostgreSQL Northwind 최적화)")
-            
-            # 동기 실행 테스트
-            test_result = enhanced_sql_agent.execute_query_sync("고객 수를 알려주세요")
-            if test_result.get("success"):
-                logger.info(f"🧪 Enhanced SQL Agent 테스트 성공 - 결과: {len(test_result.get('results', []))}행")
-            else:
-                logger.warning(f"⚠️ Enhanced SQL Agent 테스트 실패: {test_result.get('error', 'Unknown error')}")
+        # LangChain Agent 초기화 (기본 Agent로 사용)
+        if _langchain_agent_available:
+            try:
+                langchain_agent = LangChainTextToSQLAgent(
+                    db_manager=db_manager,
+                    enable_simulation=False,  # 실제 데이터베이스 사용
+                    verbose=False  # Production에서는 False
+                )
+                app.state.langchain_agent = langchain_agent
+                # LangChain Agent를 기본 sql_agent로 설정
+                app.state.sql_agent = langchain_agent
+                logger.info("✅ LangChain Text-to-SQL Agent 초기화 완료 (기본 Agent로 설정)")
                 
-        except Exception as e:
-            logger.error(f"❌ Enhanced SQL Agent 초기화 실패: {str(e)}")
-            # Fallback to basic functionality
-            logger.info("🔄 기본 SQL Agent로 대체")
-            app.state.sql_agent = None
-
-        # LangChain Agent 초기화 (선택적)
-        try:
-            langchain_agent = LangChainTextToSQLAgent(
-                db_manager=db_manager,
-                enable_simulation=True,
-                verbose=False  # Production에서는 False
-            )
-            app.state.langchain_agent = langchain_agent
-            logger.info("✅ LangChain Text-to-SQL Agent 초기화 완료 (Latest APIs)")
-            
-            # Agent 테스트
-            test_info = langchain_agent.get_agent_info()
-            logger.info(f"🤖 Agent 정보: {test_info['agent_type']}, 모델: {test_info['model']}, 도구: {test_info['tools_count']}개")
-            
-        except Exception as e:
-            logger.warning(f"⚠️ LangChain Agent 초기화 실패 (선택적 기능): {str(e)}")
+                # Agent 테스트
+                test_info = langchain_agent.get_agent_info()
+                logger.info(f"🤖 Agent 정보: {test_info['agent_type']}, 모델: {test_info['model']}, 도구: {test_info['tools_count']}개")
+                
+            except Exception as e:
+                logger.warning(f"⚠️ LangChain Agent 초기화 실패: {str(e)}")
+                app.state.langchain_agent = None
+                # Fallback to Enhanced SQL Agent
+                if _sql_agent_available:
+                    try:
+                        enhanced_sql_agent = SQLAgent(db_manager)
+                        app.state.sql_agent = enhanced_sql_agent
+                        logger.info("🔄 Enhanced SQL Agent로 대체")
+                    except Exception as e2:
+                        logger.error(f"❌ Fallback SQL Agent 초기화도 실패: {str(e2)}")
+                        app.state.sql_agent = None
+                else:
+                    app.state.sql_agent = None
+        else:
+            logger.warning("⚠️ LangChain Agent 사용 불가 (import 실패)")
             app.state.langchain_agent = None
+            
+            # Enhanced SQL Agent를 대체로 사용
+            if _sql_agent_available:
+                try:
+                    enhanced_sql_agent = SQLAgent(db_manager)
+                    app.state.sql_agent = enhanced_sql_agent
+                    logger.info("✅ Enhanced SQL Agent 초기화 완료 (대체 Agent)")
+                    
+                    # 동기 실행 테스트
+                    test_result = enhanced_sql_agent.execute_query_sync("고객 수를 알려주세요")
+                    if test_result.get("success"):
+                        logger.info(f"� Enhanced SQL Agent 테스트 성공 - 결과: {len(test_result.get('results', []))}행")
+                    else:
+                        logger.warning(f"⚠️ Enhanced SQL Agent 테스트 실패: {test_result.get('error', 'Unknown error')}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Enhanced SQL Agent 초기화 실패: {str(e)}")
+                    app.state.sql_agent = None
+            else:
+                logger.warning("⚠️ Enhanced SQL Agent도 사용 불가")
+                app.state.sql_agent = None
 
         app.state.cache = cache
         logger.info("✅ 캐시 시스템 초기화 완료")
@@ -120,8 +152,12 @@ async def lifespan(app: FastAPI):
         
         # 시스템 상태 로깅
         logger.info("📊 시스템 상태:")
-        logger.info(f"  - Enhanced SQL Agent: {'✅ 활성' if app.state.sql_agent else '❌ 비활성'}")
-        logger.info(f"  - LangChain Agent: {'✅ 활성' if hasattr(app.state, 'langchain_agent') and app.state.langchain_agent else '❌ 비활성'}")
+        logger.info(f"  - 기본 Agent (sql_agent): {'✅ 활성' if app.state.sql_agent else '❌ 비활성'}")
+        if hasattr(app.state, 'langchain_agent') and app.state.langchain_agent:
+            agent_type = "LangChain Agent" if app.state.sql_agent == app.state.langchain_agent else "LangChain Agent (백업)"
+            logger.info(f"  - {agent_type}: ✅ 활성")
+        else:
+            logger.info(f"  - LangChain Agent: ❌ 비활성")
         logger.info(f"  - 데이터베이스: ✅ 연결됨")
         logger.info(f"  - 캐시: ✅ 활성")
         

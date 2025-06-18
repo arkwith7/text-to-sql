@@ -6,6 +6,7 @@ This service handles:
 - Storing and retrieving chat messages
 - Managing conversation context and history
 - Session lifecycle management
+- Token usage tracking for chat interactions
 """
 
 import uuid
@@ -20,6 +21,7 @@ from sqlalchemy import desc, func
 from database.connection_manager import DatabaseManager
 from models.models import ChatSession, ChatMessage, User
 from utils.cache import cache
+from services.token_usage_service import TokenUsageService
 
 logger = structlog.get_logger(__name__)
 
@@ -30,6 +32,8 @@ class ChatSessionService:
     def __init__(self, db_manager: DatabaseManager):
         """Initialize chat session service with database manager."""
         self.db_manager = db_manager
+        # Token usage service 초기화
+        self.token_usage_service = TokenUsageService(db_manager)
         
     async def create_session(self, user_id: str, title: Optional[str] = None, database: str = "northwind") -> Dict[str, Any]:
         """
@@ -408,3 +412,61 @@ class ChatSessionService:
         except Exception as e:
             logger.error(f"Error fetching session info: {str(e)}")
             return None
+    
+    async def record_chat_token_usage(
+        self,
+        user_id: str,
+        session_id: str,
+        message_id: str,
+        token_usage: Dict[str, int],
+        model_name: str,
+        question: str,
+        response: str
+    ) -> bool:
+        """
+        채팅 상호작용에서 발생한 토큰 사용량을 기록합니다.
+        
+        Args:
+            user_id: 사용자 ID
+            session_id: 채팅 세션 ID
+            message_id: 메시지 ID
+            token_usage: 토큰 사용량 정보
+            model_name: 사용된 모델명
+            question: 사용자 질문
+            response: AI 응답
+            
+        Returns:
+            성공 여부
+        """
+        try:
+            success = await self.token_usage_service.record_token_usage(
+                user_id=user_id,
+                session_id=session_id,
+                message_id=message_id,
+                token_usage=token_usage,
+                model_name=model_name,
+                query_type="chat_interaction",
+                additional_metadata={
+                    "question": question[:100],  # 처음 100자만 저장
+                    "response_length": len(response),
+                    "interaction_type": "chat"
+                }
+            )
+            
+            if success:
+                logger.info(
+                    f"채팅 토큰 사용량 기록 완료",
+                    user_id=user_id,
+                    session_id=session_id,
+                    total_tokens=token_usage.get("total_tokens", 0)
+                )
+            
+            return success
+            
+        except Exception as e:
+            logger.error(
+                f"채팅 토큰 사용량 기록 실패: {str(e)}",
+                user_id=user_id,
+                session_id=session_id
+            )
+            return False

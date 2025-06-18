@@ -81,8 +81,9 @@ class AzureOpenAIProvider(BaseLLMProvider):
         messages: List[Dict[str, str]],
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
+        return_usage_info: bool = False,
         **kwargs
-    ) -> str:
+    ) -> str | Dict[str, Any]:
         """
         Generate chat completion using Azure OpenAI.
         
@@ -90,10 +91,11 @@ class AzureOpenAIProvider(BaseLLMProvider):
             messages: List of chat messages
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
+            return_usage_info: If True, returns dict with content and token usage
             **kwargs: Additional parameters
             
         Returns:
-            Generated chat completion
+            Generated chat completion (str) or dict with content and usage info
         """
         if not self.client:
             await self.initialize()
@@ -107,7 +109,30 @@ class AzureOpenAIProvider(BaseLLMProvider):
                 **kwargs
             )
             
-            return response.choices[0].message.content.strip()
+            content = response.choices[0].message.content.strip()
+            
+            if return_usage_info:
+                # Extract token usage information
+                usage_info = {
+                    "content": content,
+                    "token_usage": {
+                        "prompt_tokens": response.usage.prompt_tokens,
+                        "completion_tokens": response.usage.completion_tokens,
+                        "total_tokens": response.usage.total_tokens
+                    },
+                    "model": response.model,
+                    "finish_reason": response.choices[0].finish_reason
+                }
+                
+                logger.info(
+                    f"Azure OpenAI token usage - Prompt: {usage_info['token_usage']['prompt_tokens']}, "
+                    f"Completion: {usage_info['token_usage']['completion_tokens']}, "
+                    f"Total: {usage_info['token_usage']['total_tokens']}"
+                )
+                
+                return usage_info
+            
+            return content
             
         except Exception as e:
             logger.error(f"Azure OpenAI chat completion failed: {e}")

@@ -26,12 +26,41 @@
             <span class="text-sm">{{ message.error }}</span>
           </div>
 
-          <!-- Success Response -->
-          <div v-else-if="message.queryResult">
+          <!-- AI Response/Explanation (항상 표시) -->
+          <div v-if="message.content && message.content.trim()" class="mb-4">
+            <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-md">
+              <div class="flex items-start">
+                <MessageSquare class="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
+                <div class="text-sm text-blue-800 leading-relaxed whitespace-pre-wrap">{{ message.content }}</div>
+              </div>
+            </div>
+            
+            <!-- Help suggestions for specific error messages -->
+            <div v-if="isComplexQueryError" class="mt-3 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-md">
+              <div class="flex items-start">
+                <AlertCircle class="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
+                <div class="text-sm text-yellow-800">
+                  <p class="font-medium mb-2">💡 도움말:</p>
+                  <ul class="space-y-1 text-xs">
+                    <li>• 질문을 더 구체적으로 표현해 보세요</li>
+                    <li>• 테이블명이나 컬럼명을 정확히 지정해 보세요</li>
+                    <li>• 예: "고객 정보를 보여줘" → "Customers 테이블에서 회사명과 연락처를 보여줘"</li>
+                    <li>• 복잡한 조건이 있다면 단계별로 나누어 질문하세요</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SQL Query and Results (SQL 쿼리나 결과가 있을 때) -->
+          <div v-if="message.queryResult && (message.queryResult.sql_query || (message.queryResult.data && message.queryResult.data.length > 0))">
             <!-- SQL Query Display -->
-            <div class="mb-4">
-              <h4 class="text-sm font-medium text-gray-700 mb-2">생성된 SQL 쿼리:</h4>
-              <div class="bg-gray-50 rounded-md p-3 font-mono text-sm text-gray-800 overflow-x-auto">
+            <div v-if="message.queryResult.sql_query && message.queryResult.sql_query.trim() !== ''" class="mb-4">
+              <h4 class="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                <Code class="w-4 h-4 mr-2" />
+                생성된 SQL 쿼리:
+              </h4>
+              <div class="bg-gray-50 rounded-md p-3 font-mono text-sm text-gray-800 overflow-x-auto border">
                 {{ message.queryResult.sql_query }}
               </div>
               <div class="flex justify-between items-center mt-2">
@@ -40,7 +69,7 @@
                 </span>
                 <button
                   @click="copyQuery"
-                  class="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                  class="text-xs text-blue-600 hover:text-blue-800 flex items-center transition-colors"
                 >
                   <Copy class="w-3 h-3 mr-1" />
                   복사
@@ -49,10 +78,10 @@
             </div>
 
             <!-- Results Display -->
-            <div class="mb-4">
+            <div v-if="message.queryResult.data && message.queryResult.data.length > 0" class="mb-4">
               <div class="flex items-center justify-between mb-2">
                 <h4 class="text-sm font-medium text-gray-700">
-                  결과 ({{ message.queryResult.row_count }}행)
+                  결과 ({{ message.queryResult.row_count || message.queryResult.data.length }}행)
                 </h4>
                 <div class="flex items-center space-x-2">
                   <select
@@ -135,11 +164,6 @@
               <p class="text-sm text-gray-600">{{ message.queryResult.explanation }}</p>
             </div>
           </div>
-
-          <!-- Regular text message -->
-          <div v-else class="text-sm text-gray-800">
-            {{ message.content }}
-          </div>
         </div>
       </div>
 
@@ -160,7 +184,9 @@ import {
   AlertCircle, 
   Copy, 
   Bookmark, 
-  BarChart3 
+  BarChart3,
+  MessageSquare,
+  Code
 } from 'lucide-vue-next';
 
 interface Message {
@@ -187,6 +213,10 @@ const displayLimit = ref(10);
 const displayData = computed(() => {
   if (!props.message.queryResult?.data) return [];
   return props.message.queryResult.data.slice(0, displayLimit.value);
+});
+
+const isComplexQueryError = computed(() => {
+  return props.message.content?.includes('질문이 너무 복잡하거나 데이터베이스 구조에 맞는 답변을 찾지 못했습니다');
 });
 
 const copyQuery = async () => {

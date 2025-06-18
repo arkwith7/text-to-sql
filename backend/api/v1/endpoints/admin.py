@@ -125,7 +125,7 @@ async def delete_user(
     """Delete user (admin only)."""
     try:
         # Prevent admin from deleting themselves
-        if user_id == current_user.id:
+        if user_id == current_user.get("id"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot delete your own account"

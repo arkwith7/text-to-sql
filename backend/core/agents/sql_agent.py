@@ -6,6 +6,7 @@ Handles natural language to SQL conversion and execution with PostgreSQL Northwi
 import logging
 import time
 import re
+import uuid
 from typing import Dict, Any, Optional, List, Tuple
 
 from .base_agent import BaseAgent
@@ -20,6 +21,10 @@ class SQLAgent(BaseAgent):
         """Initialize Enhanced SQL Agent with database manager."""
         super().__init__(db_manager)
         self.logger = logging.getLogger(__name__)
+        
+        # Token usage service 초기화 (지연 import)
+        self.db_manager = db_manager
+        self.token_usage_service = None
         
         # 노트북의 AdvancedSQLGenerator 기능 추가
         self.generation_stats = {
@@ -79,6 +84,17 @@ class SQLAgent(BaseAgent):
         }
         
         self.logger.info(f"Enhanced SQL Agent 초기화 완료 - {len(self.query_patterns)}개 패턴 로드됨")
+    
+    def _get_token_usage_service(self):
+        """토큰 사용량 서비스를 지연 로딩합니다."""
+        if self.token_usage_service is None and self.db_manager:
+            try:
+                from services.token_usage_service import TokenUsageService
+                self.token_usage_service = TokenUsageService(self.db_manager)
+                self.logger.info("✅ Token Usage Service 연동 완료")
+            except ImportError as e:
+                self.logger.warning(f"Token Usage Service 로딩 실패: {e}")
+        return self.token_usage_service
     
     def _generate_sql(self, question: str) -> Tuple[str, str]:
         """자연어 질문을 SQL로 변환합니다."""
@@ -405,3 +421,71 @@ class SQLAgent(BaseAgent):
         }
         
         return sql_query, explanation, metadata
+    
+    async def record_query_token_usage(
+        self,
+        user_id: str,
+        query_id: str,
+        token_usage: Dict[str, int],
+        model_name: str,
+        question: str,
+        sql_query: str
+    ):
+        """쿼리 실행 시 토큰 사용량을 기록합니다."""
+        token_service = self._get_token_usage_service()
+        if not token_service:
+            return False
+            
+        try:
+            # QueryAnalytics에 토큰 사용량과 함께 저장
+            from models.models import QueryAnalytics
+            
+            async with self.db_manager.get_session("app") as session:
+                analytics_record = QueryAnalytics(
+                    id=str(uuid.uuid4()),
+                    query_id=query_id,
+                    user_id=user_id,
+                    question=question,
+                    sql_query=sql_query,
+                    execution_time=0.0,  # SQL 실행 시간과 별도로 관리
+                    row_count=0,
+                    success=True,
+                    # 토큰 사용량 정보
+                    prompt_tokens=token_usage.get("prompt_tokens", 0),
+                    completion_tokens=token_usage.get("completion_tokens", 0),
+                    total_tokens=token_usage.get("total_tokens", 0),
+                    llm_model=model_name,
+                    llm_cost_estimate=self._calculate_cost(token_usage, model_name)
+                )
+                
+                session.add(analytics_record)
+                
+                # 사용자의 토큰 사용량 요약도 업데이트
+                await token_service._update_user_token_summary(
+                    session, user_id, token_usage
+                )
+                
+                self.logger.info(
+                    f"토큰 사용량 기록 완료 - 사용자: {user_id}, 총 토큰: {token_usage.get('total_tokens', 0)}"
+                )
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"토큰 사용량 기록 실패: {str(e)}")
+            return False
+    
+    def _calculate_cost(self, token_usage: Dict[str, int], model_name: str) -> float:
+        """모델별 토큰 사용량에 따른 비용 계산"""
+        # GPT-4o 기준 가격 (2024년 기준)
+        pricing = {
+            "gpt-4o": {"input": 0.005 / 1000, "output": 0.015 / 1000},  # per 1K tokens
+            "gpt-35-turbo": {"input": 0.0015 / 1000, "output": 0.002 / 1000},
+            "default": {"input": 0.002 / 1000, "output": 0.003 / 1000}
+        }
+        
+        model_pricing = pricing.get(model_name.lower(), pricing["default"])
+        
+        input_cost = token_usage.get("prompt_tokens", 0) * model_pricing["input"]
+        output_cost = token_usage.get("completion_tokens", 0) * model_pricing["output"]
+        
+        return round(input_cost + output_cost, 6)
