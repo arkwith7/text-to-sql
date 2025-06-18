@@ -34,8 +34,8 @@
               <span class="block text-blue-600">비즈니스 분석</span>
             </h1>
             <p class="mt-3 text-base text-gray-500 sm:mt-5 sm:text-xl lg:text-lg xl:text-xl">
-              복잡한 SQL 쿼리 작성 없이 자연어로 질문하면, AI Agent가 즉시 인사이트를 제공합니다. 
-              Azure OpenAI 기반의 Text-to-SQL 기술로 비즈니스 의사결정을 가속화하세요.
+              복잡한 SQL 쿼리 작성 없이 자연어로 질문하면, AI Agent가 Northwind 비즈니스 데이터에서 즉시 인사이트를 제공합니다. 
+              Azure OpenAI 기반의 Text-to-SQL 기술로 실제 무역회사 데이터를 분석하며 비즈니스 의사결정을 가속화하세요.
             </p>
             <div class="mt-8 sm:max-w-lg sm:mx-auto sm:text-center lg:text-left lg:mx-0">
               <div class="flex flex-col sm:flex-row gap-4">
@@ -67,24 +67,30 @@
                 <div class="p-6 space-y-4">
                   <div class="bg-blue-50 p-4 rounded-lg">
                     <p class="text-sm text-gray-600 mb-2">질문:</p>
-                    <p class="font-medium text-gray-900">"지난 3개월간 가장 많이 팔린 제품 5개는?"</p>
+                    <p class="font-medium text-gray-900">"가장 많이 팔린 제품 5개는?"</p>
                   </div>
                   <div class="bg-green-50 p-4 rounded-lg">
                     <p class="text-sm text-gray-600 mb-2">AI 응답:</p>
                     <div class="space-y-2">
                       <div class="bg-white p-3 rounded border">
                         <div class="flex justify-between">
-                          <span class="text-sm font-medium">노트북 컴퓨터</span>
-                          <span class="text-sm text-blue-600">1,245개</span>
+                          <span class="text-sm font-medium">Gorgonzola Telino</span>
+                          <span class="text-sm text-blue-600">328개</span>
                         </div>
                       </div>
                       <div class="bg-white p-3 rounded border">
                         <div class="flex justify-between">
-                          <span class="text-sm font-medium">무선 마우스</span>
-                          <span class="text-sm text-blue-600">987개</span>
+                          <span class="text-sm font-medium">Camembert Pierrot</span>
+                          <span class="text-sm text-blue-600">297개</span>
                         </div>
                       </div>
-                      <div class="text-xs text-gray-500">+ 3개 더...</div>
+                      <div class="bg-white p-3 rounded border">
+                        <div class="flex justify-between">
+                          <span class="text-sm font-medium">Raclette Courdavault</span>
+                          <span class="text-sm text-blue-600">264개</span>
+                        </div>
+                      </div>
+                      <div class="text-xs text-gray-500">+ 2개 더... (자동 차트 생성)</div>
                     </div>
                   </div>
                 </div>
@@ -179,6 +185,85 @@
       </div>
     </section>
 
+    <!-- Database Information Section -->
+    <section class="py-16 bg-gradient-to-br from-slate-50 to-blue-50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center">
+          <h2 class="text-3xl font-extrabold text-gray-900 sm:text-4xl">
+            실제 비즈니스 데이터로 체험하세요
+          </h2>
+          <p class="mt-4 max-w-3xl mx-auto text-xl text-gray-500">
+            Microsoft Northwind 샘플 데이터베이스를 활용하여 실제 무역회사의 판매 데이터를 분석할 수 있습니다
+          </p>
+        </div>
+
+        <!-- Database Overview -->
+        <div class="mt-16 bg-white rounded-2xl shadow-xl p-8">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+            <div>
+              <div class="flex items-center mb-6">
+                <div class="w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center mr-4">
+                  <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="text-2xl font-bold text-gray-900">Northwind 데이터베이스</h3>
+                  <p class="text-sm text-gray-600">가상 무역회사의 완전한 비즈니스 생태계</p>
+                </div>
+              </div>
+              
+              <div class="space-y-4">
+                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                  <span class="font-medium text-gray-700">총 테이블 수</span>
+                  <span class="text-2xl font-bold text-blue-600">8개</span>
+                </div>
+                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                  <span class="font-medium text-gray-700">총 레코드 수</span>
+                  <span class="text-2xl font-bold text-green-600">900+</span>
+                </div>
+                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                  <span class="font-medium text-gray-700">비즈니스 영역</span>
+                  <span class="text-sm font-semibold text-purple-600">전자상거래 • 물류 • 고객관리</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Database Schema Visual -->
+            <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6">
+              <h4 class="text-lg font-semibold text-gray-800 mb-4">주요 테이블 구조</h4>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="bg-white rounded-lg p-3 shadow-sm border-l-4 border-blue-500">
+                  <div class="font-medium text-sm text-gray-800">👥 고객 (91개)</div>
+                  <div class="text-xs text-gray-600 mt-1">고객사 정보 및 연락처</div>
+                </div>
+                <div class="bg-white rounded-lg p-3 shadow-sm border-l-4 border-green-500">
+                  <div class="font-medium text-sm text-gray-800">📦 제품 (77개)</div>
+                  <div class="text-xs text-gray-600 mt-1">상품 카탈로그 및 가격</div>
+                </div>
+                <div class="bg-white rounded-lg p-3 shadow-sm border-l-4 border-purple-500">
+                  <div class="font-medium text-sm text-gray-800">🛒 주문 (196개)</div>
+                  <div class="text-xs text-gray-600 mt-1">고객 주문 정보</div>
+                </div>
+                <div class="bg-white rounded-lg p-3 shadow-sm border-l-4 border-yellow-500">
+                  <div class="font-medium text-sm text-gray-800">📋 주문상세 (518개)</div>
+                  <div class="text-xs text-gray-600 mt-1">상세 주문 항목</div>
+                </div>
+                <div class="bg-white rounded-lg p-3 shadow-sm border-l-4 border-red-500">
+                  <div class="font-medium text-sm text-gray-800">🏷️ 카테고리 (8개)</div>
+                  <div class="text-xs text-gray-600 mt-1">음료, 조미료, 과자류 등</div>
+                </div>
+                <div class="bg-white rounded-lg p-3 shadow-sm border-l-4 border-indigo-500">
+                  <div class="font-medium text-sm text-gray-800">👨‍💼 직원 (10명)</div>
+                  <div class="text-xs text-gray-600 mt-1">영업담당자 정보</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Sample Questions Section -->
     <section class="py-16 bg-indigo-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -187,12 +272,12 @@
             이런 질문들을 자연어로 해보세요
           </h2>
           <p class="mt-4 max-w-2xl mx-auto text-xl text-gray-500">
-            복잡한 SQL 없이 평소 말하듯이 질문하면 AI가 즉시 답변해드립니다
+            Northwind 데이터베이스에서 복잡한 SQL 없이 평소 말하듯이 질문하면 AI가 즉시 답변해드립니다
           </p>
         </div>
 
         <div class="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500 hover:shadow-lg transition-shadow">
             <div class="flex items-start space-x-3">
               <div class="flex-shrink-0">
                 <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -200,27 +285,33 @@
                 </svg>
               </div>
               <div>
-                <p class="text-gray-900 font-medium">"지난 3개월간 가장 많이 팔린 제품 5개는?"</p>
-                <p class="mt-2 text-sm text-gray-500">매출 분석 및 인기 상품 파악</p>
+                <p class="text-gray-900 font-medium">"가장 많이 팔린 제품 5개는?"</p>
+                <p class="mt-2 text-sm text-gray-500">인기 상품 분석 및 매출 기여도 파악</p>
+                <div class="mt-3 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                  Products + OrderDetails 테이블 조인
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
+          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500 hover:shadow-lg transition-shadow">
             <div class="flex items-start space-x-3">
               <div class="flex-shrink-0">
                 <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                 </svg>
               </div>
               <div>
-                <p class="text-gray-900 font-medium">"부서별 평균 급여를 보여줘"</p>
-                <p class="mt-2 text-sm text-gray-500">인사 데이터 분석 및 급여 비교</p>
+                <p class="text-gray-900 font-medium">"고객별 주문 횟수 상위 10명"</p>
+                <p class="mt-2 text-sm text-gray-500">VIP 고객 식별 및 고객 세분화</p>
+                <div class="mt-3 text-xs bg-green-50 text-green-700 px-2 py-1 rounded">
+                  Customers + Orders 테이블 분석
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500 hover:shadow-lg transition-shadow">
             <div class="flex items-start space-x-3">
               <div class="flex-shrink-0">
                 <svg class="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -228,27 +319,33 @@
                 </svg>
               </div>
               <div>
-                <p class="text-gray-900 font-medium">"매월 매출 추이를 확인하고 싶어"</p>
-                <p class="mt-2 text-sm text-gray-500">시계열 분석 및 트렌드 파악</p>
+                <p class="text-gray-900 font-medium">"카테고리별 매출을 보여줘"</p>
+                <p class="mt-2 text-sm text-gray-500">제품군별 수익성 분석</p>
+                <div class="mt-3 text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded">
+                  Categories + Products + OrderDetails 조인
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
+          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500 hover:shadow-lg transition-shadow">
             <div class="flex items-start space-x-3">
               <div class="flex-shrink-0">
                 <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
                 </svg>
               </div>
               <div>
-                <p class="text-gray-900 font-medium">"고객별 주문 횟수 상위 10명"</p>
-                <p class="mt-2 text-sm text-gray-500">고객 세분화 및 VIP 고객 식별</p>
+                <p class="text-gray-900 font-medium">"국가별 고객 수를 알려줘"</p>
+                <p class="mt-2 text-sm text-gray-500">지역별 시장 분석 및 확장 전략</p>
+                <div class="mt-3 text-xs bg-red-50 text-red-700 px-2 py-1 rounded">
+                  Customers 테이블 그룹화 분석
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
+          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500 hover:shadow-lg transition-shadow">
             <div class="flex items-start space-x-3">
               <div class="flex-shrink-0">
                 <svg class="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -256,13 +353,16 @@
                 </svg>
               </div>
               <div>
-                <p class="text-gray-900 font-medium">"카테고리별 제품 수량"</p>
-                <p class="mt-2 text-sm text-gray-500">재고 관리 및 카테고리 분석</p>
+                <p class="text-gray-900 font-medium">"가장 비싼 제품 5개는?"</p>
+                <p class="mt-2 text-sm text-gray-500">프리미엄 제품 라인업 분석</p>
+                <div class="mt-3 text-xs bg-yellow-50 text-yellow-700 px-2 py-1 rounded">
+                  Products 테이블 가격 정렬
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-indigo-500">
+          <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-indigo-500 hover:shadow-lg transition-shadow">
             <div class="flex items-start space-x-3">
               <div class="flex-shrink-0">
                 <svg class="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,8 +370,61 @@
                 </svg>
               </div>
               <div>
-                <p class="text-gray-900 font-medium">"가장 수익성이 높은 제품은?"</p>
-                <p class="mt-2 text-sm text-gray-500">수익성 분석 및 마진 최적화</p>
+                <p class="text-gray-900 font-medium">"직원별 담당 주문 수는?"</p>
+                <p class="mt-2 text-sm text-gray-500">영업사원 성과 평가 및 분석</p>
+                <div class="mt-3 text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded">
+                  Employees + Orders 테이블 조인
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sample Data Preview -->
+        <div class="mt-16 bg-white rounded-2xl shadow-xl p-8">
+          <div class="text-center mb-8">
+            <h3 class="text-2xl font-bold text-gray-900">실제 데이터 미리보기</h3>
+            <p class="mt-2 text-gray-600">분석 가능한 실제 비즈니스 데이터 샘플</p>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Categories Sample -->
+            <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6">
+              <h4 class="font-semibold text-blue-800 mb-4">🏷️ 제품 카테고리 (8개)</h4>
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between bg-white bg-opacity-70 rounded px-3 py-2">
+                  <span>음료 (Beverages)</span>
+                  <span class="text-blue-600 font-medium">12개 제품</span>
+                </div>
+                <div class="flex justify-between bg-white bg-opacity-70 rounded px-3 py-2">
+                  <span>조미료 (Condiments)</span>
+                  <span class="text-blue-600 font-medium">12개 제품</span>
+                </div>
+                <div class="flex justify-between bg-white bg-opacity-70 rounded px-3 py-2">
+                  <span>유제품 (Dairy Products)</span>
+                  <span class="text-blue-600 font-medium">10개 제품</span>
+                </div>
+                <div class="text-xs text-blue-600 text-center pt-2">+ 과자류, 곡물/시리얼, 육류/가금류 등</div>
+              </div>
+            </div>
+
+            <!-- Countries Sample -->
+            <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6">
+              <h4 class="font-semibold text-green-800 mb-4">🌍 고객 분포 국가 (21개국)</h4>
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between bg-white bg-opacity-70 rounded px-3 py-2">
+                  <span>🇺🇸 USA</span>
+                  <span class="text-green-600 font-medium">13명</span>
+                </div>
+                <div class="flex justify-between bg-white bg-opacity-70 rounded px-3 py-2">
+                  <span>🇩🇪 Germany</span>
+                  <span class="text-green-600 font-medium">11명</span>
+                </div>
+                <div class="flex justify-between bg-white bg-opacity-70 rounded px-3 py-2">
+                  <span>🇫🇷 France</span>
+                  <span class="text-green-600 font-medium">11명</span>
+                </div>
+                <div class="text-xs text-green-600 text-center pt-2">+ Brazil, UK, Mexico, Italy 등</div>
               </div>
             </div>
           </div>

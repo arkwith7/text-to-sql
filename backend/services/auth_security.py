@@ -16,6 +16,6 @@ def get_openapi_security_schemes() -> Dict[str, Any]:
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
-            "description": "Enter JWT token"
+            "description": "Enter JWT token (without 'Bearer ' prefix)"
         }
     }

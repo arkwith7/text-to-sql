@@ -75,18 +75,27 @@ export function useAuth() {
     error.value = null;
 
     try {
+      console.log('🔄 로그인 시도 중...');
       const response = await api.post<Token>('/api/v1/auth/login', credentials);
       const tokenData = response.data;
+      
+      console.log('✅ 로그인 성공:', {
+        hasToken: !!tokenData.access_token,
+        hasUser: !!tokenData.user,
+        userEmail: tokenData.user?.email
+      });
       
       // Store token and user data
       token.value = tokenData.access_token;
       user.value = tokenData.user;
       localStorage.setItem('auth_token', tokenData.access_token);
       
+      console.log('💾 토큰과 사용자 정보 저장 완료');
+      
       return true;
     } catch (err: any) {
+      console.error('❌ 로그인 실패:', err);
       error.value = err.response?.data?.detail || 'Login failed';
-      console.error('Login error:', err);
       return false;
     } finally {
       loading.value = false;
@@ -94,25 +103,46 @@ export function useAuth() {
   };
 
   const logout = () => {
+    console.log('🚪 로그아웃 처리 시작');
+    
+    // Clear all auth state
     token.value = null;
     user.value = null;
-    localStorage.removeItem('auth_token');
     error.value = null;
+    
+    // Clear localStorage
+    localStorage.removeItem('auth_token');
+    
+    console.log('✅ 로그아웃 완료 - 모든 상태 초기화됨');
   };
 
   const fetchUserProfile = async (): Promise<boolean> => {
-    if (!token.value) return false;
+    if (!token.value) {
+      console.log('❌ fetchUserProfile: 토큰이 없음');
+      return false;
+    }
+
+    console.log('🔄 fetchUserProfile 시작', {
+      tokenExists: !!token.value,
+      tokenPrefix: token.value?.substring(0, 10) + '...'
+    });
 
     loading.value = true;
     error.value = null;
 
     try {
       const response = await api.get<User>('/api/v1/auth/me');
+      console.log('✅ fetchUserProfile 성공:', response.data);
       user.value = response.data;
       return true;
     } catch (err: any) {
+      console.error('❌ fetchUserProfile 실패:', {
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        headers: err.response?.headers
+      });
       error.value = err.response?.data?.detail || 'Failed to fetch profile';
-      console.error('Profile fetch error:', err);
       return false;
     } finally {
       loading.value = false;
@@ -139,8 +169,16 @@ export function useAuth() {
 
   // Initialize auth state on page load
   const initializeAuth = async () => {
-    if (token.value) {
-      await fetchUserProfile();
+    console.log('🔄 initializeAuth 호출됨', {
+      hasToken: !!token.value,
+      tokenLength: token.value?.length,
+      hasUser: !!user.value
+    });
+    
+    if (token.value && !user.value) {
+      console.log('👤 토큰은 있지만 사용자 정보 없음 - 프로필 로드 시도');
+      const success = await fetchUserProfile();
+      console.log('📊 프로필 로드 결과:', { success, user: user.value });
     }
   };
 

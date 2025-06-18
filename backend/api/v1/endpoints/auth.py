@@ -96,6 +96,7 @@ async def get_current_user_info(
     current_user: UserResponse = Depends(get_current_user)
 ):
     """Get current user information."""
+    print(f"🔄 /me 엔드포인트 호출됨 - 사용자: {current_user}")
     return current_user
 
 @router.get("/stats")

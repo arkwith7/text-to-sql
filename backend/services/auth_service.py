@@ -595,9 +595,20 @@ class AuthService:
         request_id = getattr(request.state, 'request_id', 'unknown')
         
         try:
+            # 모든 헤더를 로그로 확인 (디버깅용)
+            self.logger.debug(f"🔍 Request headers - Request ID: {request_id}")
+            for key, value in request.headers.items():
+                # Authorization 헤더는 마스킹해서 로그
+                if key.lower() == 'authorization':
+                    masked_value = f"{value[:20]}..." if len(value) > 20 else value
+                    self.logger.debug(f"  {key}: {masked_value}")
+                else:
+                    self.logger.debug(f"  {key}: {value}")
+            
             # 인증 헤더 확인
             authorization = request.headers.get("authorization")
             if not authorization:
+                self.logger.debug(f"🔍 Authorization 헤더가 없습니다 - Request ID: {request_id}")
                 if required:
                     self.logger.debug(f"🔍 인증 헤더 없음 - Request ID: {request_id}")
                     raise HTTPException(
@@ -607,12 +618,15 @@ class AuthService:
                     )
                 return None
             
+            self.logger.debug(f"🔑 Authorization 헤더 발견: {authorization[:30]}... - Request ID: {request_id}")
+            
             # 토큰 추출
             try:
-                scheme, token = authorization.split()
+                scheme, token = authorization.split(' ', 1)  # maxsplit=1로 수정
+                self.logger.debug(f"🔑 Scheme: {scheme}, Token 길이: {len(token)} - Request ID: {request_id}")
             except ValueError:
                 if required:
-                    self.logger.debug(f"🔍 잘못된 인증 헤더 형식 - Request ID: {request_id}")
+                    self.logger.debug(f"🔍 잘못된 인증 헤더 형식: {authorization} - Request ID: {request_id}")
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Invalid authorization header format",

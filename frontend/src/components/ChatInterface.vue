@@ -92,6 +92,21 @@
           </button>
 
           <button
+            @click="activeTab = 'database'"
+            :class="[
+              'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+              activeTab === 'database' 
+                ? 'bg-blue-100 text-blue-700' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+              isCollapsed ? 'justify-center' : ''
+            ]"
+            :title="isCollapsed ? '분석 데이터 정보' : ''"
+          >
+            <Database class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
+            <span v-if="!isCollapsed">분석 데이터 정보</span>
+          </button>
+
+          <button
             @click="activeTab = 'profile'"
             :class="[
               'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
@@ -149,6 +164,7 @@
             {{ activeTab === 'chat' ? '새로운 질문' : 
                activeTab === 'history' ? '대화 기록' : 
                activeTab === 'saved' ? '저장된 쿼리' : 
+               activeTab === 'database' ? '분석 데이터 정보' :
                activeTab === 'profile' ? '사용자 프로필' : '새로운 질문' }}
           </h2>
           
@@ -305,6 +321,13 @@
         </div>
       </div>
 
+      <!-- Database Info Tab -->
+      <div v-else-if="activeTab === 'database'" class="flex-1 overflow-y-auto">
+        <div class="p-6">
+          <DatabaseInfo />
+        </div>
+      </div>
+
       <!-- Profile Tab -->
       <div v-else-if="activeTab === 'profile'" class="flex-1 p-6 overflow-y-auto">
         <UserProfile />
@@ -336,7 +359,8 @@ import {
   LogOut, 
   Send,
   User,
-  Menu
+  Menu,
+  Database
 } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
 import { useApi } from '@/composables/useApi';
@@ -344,6 +368,7 @@ import { useChatSession } from '@/composables/useChatSession';
 import { useStreaming } from '@/composables/useStreaming';
 import ChatMessage from './ChatMessage.vue';
 import UserProfile from './UserProfile.vue';
+import DatabaseInfo from './DatabaseInfo.vue';
 import StreamingProgress from './StreamingProgress.vue';
 import type { QueryResponse, ChatMessage as ApiChatMessage } from '@/types/api';
 
@@ -433,10 +458,11 @@ const loadSessionMessages = async (sessionId: string) => {
 };
 
 const sampleQuestions = [
-  "지난 3개월간 가장 많이 팔린 제품 5개는?",
-  "월별 매출 추이를 보여주세요",
-  "고객별 주문 횟수를 알려주세요",
-  "카테고리별 평균 주문 금액은?"
+  "어떤 제품이 가장 많이 주문되었나요?",
+  "1997년 월별 매출 현황을 보여주세요",
+  "USA와 Germany의 고객 수를 비교해주세요",
+  "Seafood 카테고리 제품들의 평균 단가는?",
+  "직원 중 누가 가장 많은 주문을 처리했나요?"
 ];
 
 // Helper functions

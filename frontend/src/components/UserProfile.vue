@@ -1,15 +1,29 @@
 <template>
   <div class="max-w-4xl mx-auto space-y-6">
+    <!-- Debug Information (임시) - 토큰이 있지만 사용자 정보가 없을 때만 표시 -->
+    <div v-if="!user && token && !loading" class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+      <p class="text-yellow-800">
+        🔍 디버그: 사용자 정보가 로드되지 않았습니다. 
+        토큰 상태: {{ !!token }}, 로딩 상태: {{ loading }}, 오류: {{ error }}
+      </p>
+      <button 
+        @click="retryLoadUser"
+        class="mt-2 px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
+      >
+        사용자 정보 다시 로드
+      </button>
+    </div>
+
     <!-- Profile Header -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center space-x-4">
           <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
-            {{ user?.full_name?.charAt(0).toUpperCase() }}
+            {{ user?.full_name?.charAt(0).toUpperCase() || '?' }}
           </div>
           <div>
-            <h2 class="text-2xl font-bold text-gray-900">{{ user?.full_name }}</h2>
-            <p class="text-gray-600">{{ user?.email }}</p>
+            <h2 class="text-2xl font-bold text-gray-900">{{ user?.full_name || '사용자 이름 없음' }}</h2>
+            <p class="text-gray-600">{{ user?.email || '이메일 없음' }}</p>
           </div>
         </div>
         <button
@@ -206,7 +220,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { 
   LogOut, 
   Search, 
@@ -218,9 +233,20 @@ import {
 import { useAuth } from '@/composables/useAuth';
 import type { TokenUsageStats } from '@/types/api';
 
-const { user, logout, fetchUserStats, loading } = useAuth();
+const router = useRouter();
+const { user, token, error, logout: authLogout, fetchUserProfile, fetchUserStats, loading, initializeAuth } = useAuth();
 
 const stats = ref<TokenUsageStats | null>(null);
+
+// 디버깅용 computed 속성들
+const debugInfo = computed(() => ({
+  hasUser: !!user.value,
+  hasToken: !!token.value,
+  isLoading: loading.value,
+  errorMessage: error.value,
+  userEmail: user.value?.email,
+  userName: user.value?.full_name
+}));
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString('ko-KR', {
@@ -239,7 +265,64 @@ const loadStats = async () => {
   }
 };
 
-onMounted(() => {
-  loadStats();
+// 사용자 정보 재로드 함수 (디버깅용)
+const retryLoadUser = async () => {
+  console.log('🔄 사용자 정보 재로드 시도...', {
+    hasToken: !!token.value,
+    tokenLength: token.value?.length
+  });
+  
+  const success = await fetchUserProfile();
+  console.log('📊 사용자 정보 로드 결과:', {
+    success,
+    user: user.value,
+    error: error.value
+  });
+};
+
+// 로그아웃 처리 함수
+const logout = async () => {
+  console.log('🚪 로그아웃 버튼 클릭됨');
+  
+  try {
+    // 인증 상태 초기화
+    authLogout();
+    
+    // 로그인 페이지로 리다이렉션
+    console.log('📍 로그인 페이지로 리다이렉션');
+    await router.push('/login');
+  } catch (error) {
+    console.error('❌ 로그아웃 처리 중 오류:', error);
+  }
+};
+
+onMounted(async () => {
+  console.log('📱 UserProfile 컴포넌트 마운트됨', debugInfo.value);
+  
+  // 토큰이 없으면 바로 로그인 페이지로 리다이렉션
+  if (!token.value) {
+    console.log('🔒 토큰이 없어서 로그인 페이지로 리다이렉션');
+    await router.push('/login');
+    return;
+  }
+  
+  // 인증 상태 초기화
+  await initializeAuth();
+  
+  // 사용자 정보가 여전히 없으면 다시 로드 시도
+  if (!user.value && token.value) {
+    console.log('👤 사용자 정보가 없어서 다시 로드 시도');
+    await retryLoadUser();
+  }
+  
+  // 여전히 사용자 정보가 없으면 로그인 페이지로 이동
+  if (!user.value) {
+    console.log('🔒 사용자 정보 로드 실패 - 로그인 페이지로 리다이렉션');
+    await router.push('/login');
+    return;
+  }
+  
+  // 사용량 통계 로드
+  await loadStats();
 });
 </script>

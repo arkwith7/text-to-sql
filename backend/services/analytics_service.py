@@ -389,11 +389,11 @@ class AnalyticsService:
             # Get token usage from events table (if exists)
             token_query = """
             SELECT 
-                COALESCE(SUM(CAST(JSON_EXTRACT(data, '$.tokens_used') AS INTEGER)), 0) as total_tokens,
-                COALESCE(SUM(CAST(JSON_EXTRACT(data, '$.input_tokens') AS INTEGER)), 0) as input_tokens,
-                COALESCE(SUM(CAST(JSON_EXTRACT(data, '$.output_tokens') AS INTEGER)), 0) as output_tokens
+                COALESCE(SUM(CAST(JSON_EXTRACT(event_data, '$.tokens_used') AS INTEGER)), 0) as total_tokens,
+                COALESCE(SUM(CAST(JSON_EXTRACT(event_data, '$.input_tokens') AS INTEGER)), 0) as input_tokens,
+                COALESCE(SUM(CAST(JSON_EXTRACT(event_data, '$.output_tokens') AS INTEGER)), 0) as output_tokens
             FROM events 
-            WHERE user_id = :user_id AND type = 'query_executed'
+            WHERE user_id = :user_id AND event_type = 'query_executed'
             """
             
             token_result = await self.db_manager.execute_query_safe(
@@ -409,9 +409,9 @@ class AnalyticsService:
             # Get daily usage for the last 30 days
             daily_usage_query = """
             SELECT 
-                DATE(timestamp) as date,
+                DATE(qa.timestamp) as date,
                 COUNT(*) as queries,
-                COALESCE(SUM(CAST(JSON_EXTRACT(e.data, '$.tokens_used') AS INTEGER)), 0) as tokens
+                COALESCE(SUM(CAST(JSON_EXTRACT(e.event_data, '$.tokens_used') AS INTEGER)), 0) as tokens
             FROM query_analytics qa
             LEFT JOIN events e ON qa.user_id = e.user_id AND DATE(qa.timestamp) = DATE(e.timestamp)
             WHERE qa.user_id = :user_id 

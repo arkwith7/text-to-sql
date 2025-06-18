@@ -208,19 +208,39 @@ def custom_openapi():
         routes=app.routes,
     )
     
-    # Add security schemes
+    # Add security schemes - 수정된 부분
+    if "components" not in openapi_schema:
+        openapi_schema["components"] = {}
+    
     openapi_schema["components"]["securitySchemes"] = get_openapi_security_schemes()
     
-    # Add security to all protected endpoints
+    # Add security to protected endpoints
+    unauthenticated_paths = {
+        "/api/v1/auth/register",
+        "/api/v1/auth/login", 
+        "/api/v1/auth/refresh",
+        "/health",
+        "/docs",
+        "/redoc",
+        "/openapi.json"
+    }
+    
     for path, path_data in openapi_schema["paths"].items():
         for method, operation in path_data.items():
-            if isinstance(operation, dict) and "tags" in operation:
-                # Skip authentication endpoints and system endpoints
-                if any(tag in ["Authentication", "System"] for tag in operation["tags"]):
+            if isinstance(operation, dict):
+                # Skip unauthenticated endpoints
+                if path in unauthenticated_paths:
                     continue
-                # Add security requirement for protected endpoints if not present
-                if "security" not in operation:
-                    operation["security"] = [{"JWTBearer": []}]
+                    
+                # Skip if explicitly has tags that should be public
+                tags = operation.get("tags", [])
+                if any(tag in ["Authentication", "System"] for tag in tags):
+                    # 단, /auth/me는 보호되어야 함
+                    if path != "/api/v1/auth/me":
+                        continue
+                
+                # Add security requirement for protected endpoints
+                operation["security"] = [{"JWTBearer": []}]
     
     app.openapi_schema = openapi_schema
     return app.openapi_schema
