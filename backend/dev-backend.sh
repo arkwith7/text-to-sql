@@ -151,10 +151,14 @@ if docker ps --format "{{.Names}}" | grep -q "^${POSTGRES_CONTAINER_NAME}$"; the
         # Check if Northwind database needs initialization
         echo "🗄️  Checking if Northwind database needs initialization..."
         
-        # Check if Northwind tables exist (checking for customers table as indicator)
-        echo "🔍 Checking if Northwind data already exists..."
+        # Check if Northwind database exists, if not, create it first
+        DB_EXIST=$(docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME';" 2>/dev/null | tr -d ' \n')
+        if [ "$DB_EXIST" != "1" ]; then
+            echo "📦 Northwind database does not exist. Creating..."
+            docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -c "CREATE DATABASE $DB_NAME;"
+        fi
+        # Now check for tables and load data if needed
         TABLE_COUNT=$(docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'customers';" 2>/dev/null | tr -d ' \n' || echo "0")
-        
         if [ "$TABLE_COUNT" -gt 0 ]; then
             echo "✅ Northwind database already initialized (found existing tables)"
         else
@@ -193,8 +197,13 @@ elif docker ps -a --format "{{.Names}}" | grep -q "^${POSTGRES_CONTAINER_NAME}$"
     # Check if Northwind database needs initialization
     echo "🗄️  Checking if Northwind database needs initialization..."
     
-    # Check if Northwind tables exist (checking for customers table as indicator)
-    echo "🔍 Checking if Northwind data already exists..."
+    # Check if Northwind database exists, if not, create it first
+    DB_EXIST=$(docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME';" 2>/dev/null | tr -d ' \n')
+    if [ "$DB_EXIST" != "1" ]; then
+        echo "📦 Northwind database does not exist. Creating..."
+        docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -c "CREATE DATABASE $DB_NAME;"
+    fi
+    # Now check for tables and load data if needed
     TABLE_COUNT=$(docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'customers';" 2>/dev/null | tr -d ' \n' || echo "0")
     
     if [ "$TABLE_COUNT" -gt 0 ]; then
@@ -241,8 +250,13 @@ else
     # Initialize Northwind database if needed
     echo "🗄️  Checking if Northwind database needs initialization..."
     
-    # Check if Northwind tables exist (checking for customers table as indicator)
-    echo "🔍 Checking if Northwind data already exists..."
+    # Check if Northwind database exists, if not, create it first
+    DB_EXIST=$(docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME';" 2>/dev/null | tr -d ' \n')
+    if [ "$DB_EXIST" != "1" ]; then
+        echo "📦 Northwind database does not exist. Creating..."
+        docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -c "CREATE DATABASE $DB_NAME;"
+    fi
+    # Now check for tables and load data if needed
     TABLE_COUNT=$(docker exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'customers';" 2>/dev/null | tr -d ' \n' || echo "0")
     
     if [ "$TABLE_COUNT" -gt 0 ]; then

@@ -61,7 +61,7 @@
           </div>
 
           <!-- SQL Query and Results (SQL 쿼리나 결과가 있을 때) -->
-          <div v-if="message.queryResult && (message.queryResult.sql_query || (message.queryResult.data && message.queryResult.data.length > 0))">
+          <div v-if="message.queryResult">
             <!-- SQL Query Display -->
             <div v-if="message.queryResult.sql_query && message.queryResult.sql_query.trim() !== ''" class="mb-4">
               <h4 class="text-sm font-medium text-gray-700 mb-2 flex items-center">

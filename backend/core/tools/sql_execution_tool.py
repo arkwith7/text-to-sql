@@ -90,8 +90,8 @@ class SQLExecutionTool:
             if not validation_result["is_valid"]:
                 raise ValueError(f"Invalid SQL query: {validation_result['error_message']}")
             
-            # 실제 DB 연결이 가능한 경우 실제 실행
-            if self.db_manager and not self.enable_simulation:
+            # 실제 DB 연결이 가능한 경우 실제 실행 (시뮬레이션 모드가 꺼져있거나 강제 실행)
+            if not self.enable_simulation:
                 results = await self._execute_real_query(sql_query, database, max_rows, timeout)
             else:
                 # 시뮬레이션 모드
@@ -139,7 +139,7 @@ class SQLExecutionTool:
                 result_count=0,
                 user_id=user_id,
                 success=False,
-                error=error_msg
+                error_message=error_msg
             )
             
             logger.error(
@@ -236,10 +236,51 @@ class SQLExecutionTool:
             Real query results
         """
         try:
-            # TODO: 실제 데이터베이스 연결 및 실행 로직 구현
-            # 현재는 시뮬레이션으로 대체
-            logger.warning("실제 DB 연결 미구현 - 시뮬레이션 모드로 전환")
-            return self._execute_simulated_query(sql_query, database, max_rows)
+            if not self.db_manager:
+                # DB 매니저가 없으면 직접 PostgreSQL 연결
+                import asyncpg
+                import os
+                
+                # PostgreSQL 연결 정보
+                connection_params = {
+                    'host': os.getenv('POSTGRES_HOST', 'localhost'),
+                    'port': int(os.getenv('POSTGRES_PORT', 5432)),
+                    'user': os.getenv('POSTGRES_USER', 'postgres'),
+                    'password': os.getenv('POSTGRES_PASSWORD', 'password'),
+                    'database': database
+                }
+                
+                # PostgreSQL 연결 및 쿼리 실행
+                conn = await asyncpg.connect(**connection_params)
+                try:
+                    # 최대 행 수 제한
+                    if max_rows:
+                        if 'LIMIT' not in sql_query.upper():
+                            sql_query = f"{sql_query.rstrip(';')} LIMIT {max_rows}"
+                    
+                    # 쿼리 실행
+                    rows = await conn.fetch(sql_query)
+                    
+                    # 결과를 딕셔너리 리스트로 변환
+                    results = []
+                    for row in rows:
+                        result_dict = {}
+                        for key, value in row.items():
+                            # PostgreSQL 타입을 JSON 직렬화 가능한 타입으로 변환
+                            if isinstance(value, (int, float, str, bool, type(None))):
+                                result_dict[key] = value
+                            else:
+                                result_dict[key] = str(value)
+                        results.append(result_dict)
+                    
+                    logger.info(f"✅ 실제 DB 쿼리 실행 성공 - 결과: {len(results)}행")
+                    return results
+                    
+                finally:
+                    await conn.close()
+            else:
+                # DB 매니저를 통한 실행
+                return await self.db_manager.execute_query(sql_query, database, max_rows, timeout)
             
         except Exception as e:
             logger.error(f"실제 쿼리 실행 실패: {str(e)}")

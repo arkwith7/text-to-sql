@@ -427,13 +427,20 @@ const messages = computed<UIMessage[]>(() => {
     
     // Each message from the API is already separated by type
     const hasSQL = msg.sql_query && msg.sql_query.trim() !== '';
-    const hasResults = (msg.query_results || msg.query_result) && 
-                      ((Array.isArray(msg.query_results) && msg.query_results.length > 0) || 
-                       (Array.isArray(msg.query_result) && msg.query_result.length > 0) ||
-                       (typeof msg.query_results === 'string' && msg.query_results.trim() !== '[]') ||
-                       (typeof msg.query_result === 'string' && msg.query_result.trim() !== '[]'));
     
-    console.log('SQL and Results check:', { hasSQL, hasResults, sql_query: msg.sql_query, query_results: msg.query_results, query_result: msg.query_result });
+    // 더 관대한 결과 체크 - 빈 배열이라도 queryResult 객체는 생성
+    const results = msg.query_results || msg.query_result;
+    const hasResults = results !== null && results !== undefined;
+    
+    console.log('SQL and Results check:', { 
+      hasSQL, 
+      hasResults, 
+      sql_query: msg.sql_query, 
+      query_results: msg.query_results, 
+      query_result: msg.query_result,
+      results_type: typeof results,
+      results_value: results
+    });
     
     uiMessages.push({
       id: msg.id,
@@ -448,7 +455,8 @@ const messages = computed<UIMessage[]>(() => {
           if (Array.isArray(results)) return results;
           if (typeof results === 'string') {
             try {
-              return JSON.parse(results);
+              const parsed = JSON.parse(results);
+              return Array.isArray(parsed) ? parsed : [];
             } catch {
               return [];
             }
@@ -462,7 +470,8 @@ const messages = computed<UIMessage[]>(() => {
             data = results;
           } else if (typeof results === 'string') {
             try {
-              data = JSON.parse(results);
+              const parsed = JSON.parse(results);
+              data = Array.isArray(parsed) ? parsed : [];
             } catch {
               data = [];
             }

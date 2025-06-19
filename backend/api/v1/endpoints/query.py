@@ -90,6 +90,11 @@ class QueryRequest(BaseModel):
             ]
         }
 
+class TokenUsage(BaseModel):
+    prompt_tokens: int = Field(description="입력 토큰 수")
+    completion_tokens: int = Field(description="출력 토큰 수")
+    total_tokens: int = Field(description="총 토큰 수")
+
 class QueryResponse(BaseModel):
     question: str = Field(description="사용자가 입력한 원본 질문")
     sql_query: str = Field(description="생성된 SQL 쿼리문")
@@ -100,6 +105,7 @@ class QueryResponse(BaseModel):
     database: str = Field(description="조회한 데이터베이스 이름")
     success: bool = Field(description="쿼리 실행 성공 여부")
     error_message: Optional[str] = Field(None, description="오류 발생 시 오류 메시지")
+    token_usage: Optional[TokenUsage] = Field(None, description="토큰 사용량 정보")
 
     class Config:
         schema_extra = {
@@ -112,7 +118,12 @@ class QueryResponse(BaseModel):
                 "row_count": 1,
                 "database": "northwind",
                 "success": True,
-                "error_message": None
+                "error_message": None,
+                "token_usage": {
+                    "prompt_tokens": 245,
+                    "completion_tokens": 28,
+                    "total_tokens": 273
+                }
             }
         }
 
@@ -210,7 +221,7 @@ async def execute_query(
     
     try:
         # Execute the query using the agent
-        result = sql_agent.execute_query(
+        result = await sql_agent.execute_query(
             question=query_request.question,
             database=query_request.database,
             context=query_request.context,
@@ -320,15 +331,19 @@ async def execute_query(
                 "model": result.get("model", "unknown")
             }
         
-        # Token usage tracking이 활성화된 경우 analytics에 기록
-        if hasattr(request.app.state, 'analytics_service'):
-            analytics_service = request.app.state.analytics_service
+        # 토큰 사용량 정보 처리
+        token_usage_response = None
+        if "token_usage" in result and result["token_usage"]:
+            token_usage = result["token_usage"]
+            token_usage_response = TokenUsage(
+                prompt_tokens=token_usage.get("prompt_tokens", 0),
+                completion_tokens=token_usage.get("completion_tokens", 0),
+                total_tokens=token_usage.get("total_tokens", 0)
+            )
             
-            # 토큰 사용량 정보가 결과에 포함된 경우 기록
-            if "token_usage" in result:
-                token_usage = result["token_usage"]
-                
-                # Analytics service를 통해 쿼리 실행 기록
+            # Analytics service를 통해 쿼리 실행 기록
+            if hasattr(request.app.state, 'analytics_service'):
+                analytics_service = request.app.state.analytics_service
                 await analytics_service.log_query_execution(
                     query_id=str(uuid.uuid4()),
                     user_id=current_user.get("id"),
@@ -349,7 +364,8 @@ async def execute_query(
             execution_time=result["execution_time"],
             row_count=len(result["results"]),
             database=query_request.database,
-            success=True
+            success=True,
+            token_usage=token_usage_response
         )
         
     except Exception as e:
@@ -379,7 +395,8 @@ async def execute_query(
             row_count=0,
             database=query_request.database,
             success=False,
-            error_message=str(e)
+            error_message=str(e),
+            token_usage=None
         )
 
 @router.post("/validate", response_model=QueryValidationResponse)

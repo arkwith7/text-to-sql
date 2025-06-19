@@ -339,15 +339,29 @@ class SQLAgent(BaseAgent):
         context: Optional[str] = None,
         user_id: Optional[int] = None,
         include_explanation: bool = True,
+        include_debug_info: bool = False,
         max_rows: Optional[int] = None
     ) -> Dict[str, Any]:
         """비동기 방식으로 쿼리를 실행합니다."""
-        return self.execute_query_sync(
+        result = self.execute_query_sync(
             question=question,
             database=database,
             include_explanation=include_explanation,
             max_rows=max_rows
         )
+        
+        # include_debug_info가 True이면 디버그 정보를 추가
+        if include_debug_info:
+            result["debug_info"] = {
+                "agent_type": "Enhanced SQL Agent",
+                "database": database,
+                "context": context,
+                "user_id": user_id,
+                "include_explanation": include_explanation,
+                "max_rows": max_rows
+            }
+        
+        return result
     
     async def validate_query(
         self,

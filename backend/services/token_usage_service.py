@@ -459,3 +459,54 @@ class TokenUsageService:
         except Exception as e:
             self.logger.error(f"Failed to check rate limit: {str(e)}")
             return {"error": str(e), "allowed": False}
+    
+    async def record_usage(
+        self,
+        user_id: str,
+        session_id: str,
+        question: str,
+        model_name: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        total_tokens: int
+    ) -> bool:
+        """
+        Simple wrapper for recording token usage from LangChain Agent.
+        
+        Args:
+            user_id: User ID
+            session_id: Session ID
+            question: Original question
+            model_name: Model name
+            prompt_tokens: Input tokens
+            completion_tokens: Output tokens
+            total_tokens: Total tokens
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import uuid
+            
+            token_usage = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens
+            }
+            
+            message_id = str(uuid.uuid4())
+            
+            # 기존 record_token_usage 메서드 호출
+            return await self.record_token_usage(
+                user_id=user_id,
+                session_id=session_id,
+                message_id=message_id,
+                token_usage=token_usage,
+                model_name=model_name,
+                query_type="text_to_sql",
+                additional_metadata={"question": question}
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Failed to record usage: {str(e)}")
+            return False

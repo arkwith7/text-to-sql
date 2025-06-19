@@ -81,45 +81,53 @@ def generate_sql_from_question(question: str) -> str:
         생성된 SQL 쿼리와 설명을 포함한 JSON 문자열
     """
     try:
-        # 기본 패턴 매칭 기반 SQL 생성 (주피터 노트북에서 성공한 패턴)
+        # 기본 패턴 매칭 기반 SQL 생성 (올바른 PostgreSQL Northwind 스키마 사용)
         sql_patterns = {
             r'고객\s*수': ('SELECT COUNT(*) as customer_count FROM customers', '데이터베이스의 총 고객 수를 계산합니다.'),
             r'제품\s*수': ('SELECT COUNT(*) as product_count FROM products', '데이터베이스의 총 제품 수를 계산합니다.'),
             r'주문\s*수': ('SELECT COUNT(*) as order_count FROM orders', '데이터베이스의 총 주문 수를 계산합니다.'),
+            r'어떤\s*제품이?\s*가장\s*많이\s*주문': (
+                '''SELECT p.product_name, SUM(od.quantity) AS total_quantity 
+                FROM order_details od 
+                JOIN products p ON od.product_id = p.product_id 
+                GROUP BY p.product_name 
+                ORDER BY total_quantity DESC LIMIT 1''',
+                '가장 많이 주문된 제품을 조회합니다.'
+            ),
             r'(\d{4})년.*월별.*매출': (
                 '''SELECT 
-                    EXTRACT(MONTH FROM o.orderdate) as month,
-                    ROUND(SUM(od.quantity * od.price * (1 - od.discount)), 2) as total_sales
+                    EXTRACT(MONTH FROM o.order_date) as month,
+                    ROUND(SUM(od.quantity * od.unit_price * (1 - od.discount)), 2) as total_sales
                 FROM orders o 
-                JOIN order_details od ON o.orderid = od.orderid 
-                WHERE EXTRACT(YEAR FROM o.orderdate) = {}
-                GROUP BY EXTRACT(MONTH FROM o.orderdate)
+                JOIN order_details od ON o.order_id = od.order_id 
+                WHERE EXTRACT(YEAR FROM o.order_date) = {}
+                GROUP BY EXTRACT(MONTH FROM o.order_date)
                 ORDER BY month''',
                 '지정된 연도의 월별 매출을 계산합니다.'
             ),
             r'매출.*현황|매출.*분석': (
                 '''SELECT 
-                    EXTRACT(YEAR FROM o.orderdate) as year,
-                    EXTRACT(MONTH FROM o.orderdate) as month,
-                    ROUND(SUM(od.quantity * od.price * (1 - od.discount)), 2) as total_sales,
-                    COUNT(DISTINCT o.orderid) as order_count
+                    EXTRACT(YEAR FROM o.order_date) as year,
+                    EXTRACT(MONTH FROM o.order_date) as month,
+                    ROUND(SUM(od.quantity * od.unit_price * (1 - od.discount)), 2) as total_sales,
+                    COUNT(DISTINCT o.order_id) as order_count
                 FROM orders o 
-                JOIN order_details od ON o.orderid = od.orderid 
-                GROUP BY EXTRACT(YEAR FROM o.orderdate), EXTRACT(MONTH FROM o.orderdate)
+                JOIN order_details od ON o.order_id = od.order_id 
+                GROUP BY EXTRACT(YEAR FROM o.order_date), EXTRACT(MONTH FROM o.order_date)
                 ORDER BY year DESC, month DESC
                 LIMIT 12''',
                 '최근 12개월의 매출 현황을 분석합니다.'
             ),
             r'카테고리별\s*제품': (
-                'SELECT c.categoryname, COUNT(p.productid) as product_count FROM categories c LEFT JOIN products p ON c.categoryid = p.categoryid GROUP BY c.categoryname ORDER BY product_count DESC',
+                'SELECT c.category_name, COUNT(p.product_id) as product_count FROM categories c LEFT JOIN products p ON c.category_id = p.category_id GROUP BY c.category_name ORDER BY product_count DESC',
                 '카테고리별 제품 수를 계산합니다.'
             ),
             r'가장\s*비싼\s*제품\s*(\d+)개?': (
-                'SELECT productname, price FROM products ORDER BY price DESC LIMIT {}',
+                'SELECT product_name, unit_price FROM products ORDER BY unit_price DESC LIMIT {}',
                 '가격이 높은 순으로 제품을 조회합니다.'
             ),
             r'주문이?\s*가장\s*많은\s*고객': (
-                'SELECT c.customername, COUNT(o.orderid) as order_count FROM customers c LEFT JOIN orders o ON c.customerid = o.customerid GROUP BY c.customerid, c.customername ORDER BY order_count DESC LIMIT 10',
+                'SELECT c.company_name, COUNT(o.order_id) as order_count FROM customers c LEFT JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.company_name ORDER BY order_count DESC LIMIT 10',
                 '주문 건수가 많은 고객을 조회합니다.'
             ),
             r'국가별\s*고객\s*수': (
@@ -127,11 +135,11 @@ def generate_sql_from_question(question: str) -> str:
                 '국가별 고객 수를 계산합니다.'
             ),
             r'직원별\s*.*주문': (
-                'SELECT e.firstname || \' \' || e.lastname as employee_name, COUNT(o.orderid) as order_count FROM employees e LEFT JOIN orders o ON e.employeeid = o.employeeid GROUP BY e.employeeid, employee_name ORDER BY order_count DESC',
+                'SELECT e.first_name || \' \' || e.last_name as employee_name, COUNT(o.order_id) as order_count FROM employees e LEFT JOIN orders o ON e.employee_id = o.employee_id GROUP BY e.employee_id, employee_name ORDER BY order_count DESC',
                 '직원별 처리한 주문 수를 계산합니다.'
             ),
             r'배송업체별\s*.*주문': (
-                'SELECT s.shippername, COUNT(o.orderid) as order_count FROM shippers s LEFT JOIN orders o ON s.shipperid = o.shipperid GROUP BY s.shipperid, s.shippername ORDER BY order_count DESC',
+                'SELECT s.company_name, COUNT(o.order_id) as order_count FROM shippers s LEFT JOIN orders o ON s.shipper_id = o.ship_via GROUP BY s.shipper_id, s.company_name ORDER BY order_count DESC',
                 '배송업체별 주문 수를 계산합니다.'
             )
         }

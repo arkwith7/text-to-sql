@@ -245,73 +245,10 @@ class LangChainTextToSQLAgent:
                 except Exception as e:
                     logger.warning(f"토큰 사용량 기록 실패: {e}")
             
-            # 중간 단계에서 SQL 쿼리와 결과 추출
-            sql_query = ""
-            sql_results = []
-            
-            logger.info(f"🔍 중간 단계 분석 중 - 총 {len(intermediate_steps)}개 단계")
-            
-            for i, step in enumerate(intermediate_steps):
-                if step and len(step) >= 2:
-                    action, observation = step[0], step[1]
-                    
-                    logger.info(f"📋 단계 {i+1}: action.tool = {getattr(action, 'tool', 'N/A')}")
-                    logger.info(f"📋 단계 {i+1}: observation type = {type(observation)}")
-                    logger.info(f"📋 단계 {i+1}: observation full content = {str(observation)}")
-                    logger.info(f"📋 단계 {i+1}: observation preview = {str(observation)[:200]}...")
-                    
-                    # SQL 실행 단계에서 쿼리와 결과 추출
-                    if hasattr(action, 'tool') and action.tool == 'execute_sql_query_sync':
-                        if hasattr(action, 'tool_input'):
-                            sql_query = action.tool_input.get('sql_query', '')
-                            logger.info(f"🔍 SQL 쿼리 추출: {sql_query[:100]}...")
-                        
-                        # observation에서 결과 추출
-                        if isinstance(observation, str):
-                            try:
-                                # observation이 JSON 문자열인 경우 파싱
-                                import json
-                                obs_data = json.loads(observation)
-                                logger.info(f"🔍 파싱된 observation: {type(obs_data)}, keys: {list(obs_data.keys()) if isinstance(obs_data, dict) else 'N/A'}")
-                                if isinstance(obs_data, dict):
-                                    # SQL 실행 도구의 응답 형식: {"success": True, "results": [...]}
-                                    if 'results' in obs_data:
-                                        sql_results = obs_data['results']
-                                        logger.info(f"🔍 results에서 데이터 추출: {len(sql_results)}행")
-                                    elif 'data' in obs_data:
-                                        sql_results = obs_data['data']
-                                        logger.info(f"🔍 data에서 데이터 추출: {len(sql_results)}행")
-                                elif isinstance(obs_data, list):
-                                    sql_results = obs_data
-                                    logger.info(f"🔍 리스트에서 데이터 추출: {len(sql_results)}행")
-                            except (json.JSONDecodeError, ValueError) as e:
-                                # JSON이 아닌 경우, 텍스트로 처리
-                                logger.warning(f"🔍 JSON 파싱 실패: {e}")
-                        elif isinstance(observation, (list, dict)):
-                            if isinstance(observation, list):
-                                sql_results = observation
-                                logger.info(f"🔍 직접 리스트에서 데이터 추출: {len(sql_results)}행")
-                            elif isinstance(observation, dict):
-                                # SQL 실행 도구의 응답 형식: {"success": True, "results": [...]}
-                                if 'results' in observation:
-                                    sql_results = observation['results']
-                                    logger.info(f"🔍 직접 results에서 데이터 추출: {len(sql_results)}행")
-                                elif 'data' in observation:
-                                    sql_results = observation['data']
-                                    logger.info(f"🔍 직접 data에서 데이터 추출: {len(sql_results)}행")
-            
-            logger.info(
-                f"🔍 SQL 정보 추출 완료 - "
-                f"쿼리: {sql_query[:100]}{'...' if len(sql_query) > 100 else ''}, "
-                f"결과: {len(sql_results)}행"
-            )
-            
             # 응답 구성
             response = {
                 "success": True,
                 "answer": answer,
-                "sql_query": sql_query,
-                "results": sql_results,
                 "question": question,
                 "session_id": session_id,
                 "execution_time": round(execution_time, 3),
@@ -401,7 +338,6 @@ class LangChainTextToSQLAgent:
             "temperature": self.llm.temperature,
             "max_tokens": self.llm.max_tokens,
             "tools": [tool.name for tool in self.tools],
-            "tools_count": len(self.tools),  # 누락된 키 추가
             "simulation_mode": self.enable_simulation,
             "max_iterations": self.agent_executor.max_iterations,
             "database": "PostgreSQL Northwind",

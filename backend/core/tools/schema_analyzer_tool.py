@@ -93,54 +93,63 @@ class SchemaAnalyzerTool:
                 },
                 "products": {
                     "columns": [
-                        {"name": "productid", "type": "INTEGER PRIMARY KEY", "description": "제품 ID (자동 증가)"},
-                        {"name": "productname", "type": "VARCHAR(50)", "description": "제품명"},
-                        {"name": "supplierid", "type": "INTEGER", "description": "공급업체 ID (FK)"},
-                        {"name": "categoryid", "type": "INTEGER", "description": "카테고리 ID (FK)"},
-                        {"name": "unit", "type": "VARCHAR(25)", "description": "단위"},
-                        {"name": "price", "type": "NUMERIC(10,2)", "description": "단가"}
+                        {"name": "product_id", "type": "SMALLINT PRIMARY KEY", "description": "제품 ID (자동 증가)"},
+                        {"name": "product_name", "type": "VARCHAR(40)", "description": "제품명"},
+                        {"name": "supplier_id", "type": "SMALLINT", "description": "공급업체 ID (FK)"},
+                        {"name": "category_id", "type": "SMALLINT", "description": "카테고리 ID (FK)"},
+                        {"name": "quantity_per_unit", "type": "VARCHAR(20)", "description": "단위당 수량"},
+                        {"name": "unit_price", "type": "REAL", "description": "단가"},
+                        {"name": "units_in_stock", "type": "SMALLINT", "description": "재고 수량"},
+                        {"name": "units_on_order", "type": "SMALLINT", "description": "주문 수량"},
+                        {"name": "reorder_level", "type": "SMALLINT", "description": "재주문 레벨"},
+                        {"name": "discontinued", "type": "INTEGER", "description": "단종 여부"}
                     ],
                     "description": "제품 정보 테이블",
                     "row_count": 77
                 },
                 "orders": {
                     "columns": [
-                        {"name": "orderid", "type": "INTEGER PRIMARY KEY", "description": "주문 ID (자동 증가)"},
-                        {"name": "customerid", "type": "INTEGER", "description": "고객 ID (FK)"},
-                        {"name": "employeeid", "type": "INTEGER", "description": "직원 ID (FK)"},
-                        {"name": "orderdate", "type": "TIMESTAMP", "description": "주문 날짜"},
-                        {"name": "shipperid", "type": "INTEGER", "description": "배송업체 ID (FK)"}
+                        {"name": "order_id", "type": "SMALLINT PRIMARY KEY", "description": "주문 ID (자동 증가)"},
+                        {"name": "customer_id", "type": "VARCHAR(5)", "description": "고객 ID (FK)"},
+                        {"name": "employee_id", "type": "SMALLINT", "description": "직원 ID (FK)"},
+                        {"name": "order_date", "type": "DATE", "description": "주문 날짜"},
+                        {"name": "required_date", "type": "DATE", "description": "요청 날짜"},
+                        {"name": "shipped_date", "type": "DATE", "description": "배송 날짜"},
+                        {"name": "ship_via", "type": "SMALLINT", "description": "배송업체 ID (FK)"},
+                        {"name": "freight", "type": "REAL", "description": "운송비"}
                     ],
                     "description": "주문 정보 테이블",
-                    "row_count": 196
+                    "row_count": 830
                 },
-                "orderdetails": {
+                "order_details": {
                     "columns": [
-                        {"name": "orderdetailid", "type": "INTEGER PRIMARY KEY", "description": "주문상세 ID (자동 증가)"},
-                        {"name": "orderid", "type": "INTEGER", "description": "주문 ID (FK)"},
-                        {"name": "productid", "type": "INTEGER", "description": "제품 ID (FK)"},
-                        {"name": "quantity", "type": "INTEGER", "description": "주문 수량"}
+                        {"name": "order_id", "type": "SMALLINT", "description": "주문 ID (FK)"},
+                        {"name": "product_id", "type": "SMALLINT", "description": "제품 ID (FK)"},
+                        {"name": "unit_price", "type": "REAL", "description": "단가"},
+                        {"name": "quantity", "type": "SMALLINT", "description": "주문 수량"},
+                        {"name": "discount", "type": "REAL", "description": "할인율"}
                     ],
-                    "description": "주문 상세 정보 테이블",
-                    "row_count": 518
+                    "description": "주문 상세 정보 테이블 (복합 기본키: order_id, product_id)",
+                    "row_count": 2155
                 }
             },
             "relationships": [
-                {"from_table": "products", "from_column": "categoryid", "to_table": "categories", "to_column": "categoryid"},
-                {"from_table": "products", "from_column": "supplierid", "to_table": "suppliers", "to_column": "supplierid"},
-                {"from_table": "orders", "from_column": "customerid", "to_table": "customers", "to_column": "customerid"},
-                {"from_table": "orders", "from_column": "employeeid", "to_table": "employees", "to_column": "employeeid"},
-                {"from_table": "orders", "from_column": "shipperid", "to_table": "shippers", "to_column": "shipperid"},
-                {"from_table": "orderdetails", "from_column": "orderid", "to_table": "orders", "to_column": "orderid"},
-                {"from_table": "orderdetails", "from_column": "productid", "to_table": "products", "to_column": "productid"}
+                {"from_table": "products", "from_column": "category_id", "to_table": "categories", "to_column": "category_id"},
+                {"from_table": "products", "from_column": "supplier_id", "to_table": "suppliers", "to_column": "supplier_id"},
+                {"from_table": "orders", "from_column": "customer_id", "to_table": "customers", "to_column": "customer_id"},
+                {"from_table": "orders", "from_column": "employee_id", "to_table": "employees", "to_column": "employee_id"},
+                {"from_table": "orders", "from_column": "ship_via", "to_table": "shippers", "to_column": "shipper_id"},
+                {"from_table": "order_details", "from_column": "order_id", "to_table": "orders", "to_column": "order_id"},
+                {"from_table": "order_details", "from_column": "product_id", "to_table": "products", "to_column": "product_id"}
             ],
             "common_queries": [
                 "SELECT COUNT(*) FROM customers; -- 고객 수 조회",
                 "SELECT COUNT(*) FROM products; -- 제품 수 조회",
                 "SELECT COUNT(*) FROM orders; -- 주문 수 조회",
-                "SELECT categoryname, COUNT(*) FROM categories c JOIN products p ON c.categoryid = p.categoryid GROUP BY categoryname; -- 카테고리별 제품 수",
-                "SELECT productname, price FROM products ORDER BY price DESC LIMIT 5; -- 가장 비싼 제품 5개",
-                "SELECT c.customername, COUNT(o.orderid) as order_count FROM customers c LEFT JOIN orders o ON c.customerid = o.customerid GROUP BY c.customerid, c.customername ORDER BY order_count DESC LIMIT 10; -- 주문이 많은 고객",
+                "SELECT c.category_name, COUNT(*) FROM categories c JOIN products p ON c.category_id = p.category_id GROUP BY c.category_name; -- 카테고리별 제품 수",
+                "SELECT product_name, unit_price FROM products ORDER BY unit_price DESC LIMIT 5; -- 가장 비싼 제품 5개",
+                "SELECT p.product_name, SUM(od.quantity) as total_quantity FROM order_details od JOIN products p ON od.product_id = p.product_id GROUP BY p.product_name ORDER BY total_quantity DESC LIMIT 5; -- 가장 많이 주문된 제품",
+                "SELECT c.company_name, COUNT(o.order_id) as order_count FROM customers c LEFT JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.company_name ORDER BY order_count DESC LIMIT 10; -- 주문이 많은 고객",
                 "SELECT country, COUNT(*) as customer_count FROM customers GROUP BY country ORDER BY customer_count DESC; -- 국가별 고객 수"
             ]
         }
