@@ -130,35 +130,43 @@
         <!-- Token Usage Chart -->
         <div class="bg-gray-50 rounded-lg p-6">
           <h4 class="text-md font-semibold text-gray-900 mb-4">토큰 사용량 상세</h4>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          <!-- 로딩 상태 표시 -->
+          <div v-if="!stats" class="text-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p class="text-gray-500">토큰 사용량 데이터를 로드하는 중...</p>
+          </div>
+          
+          <!-- 토큰 사용량 데이터 표시 -->
+          <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Input Tokens -->
             <div class="bg-white rounded-lg p-4 border border-gray-200">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-gray-700">입력 토큰</span>
-                <span class="text-xs text-gray-500">{{ ((stats.input_tokens || 0) / (stats.total_tokens || 1) * 100).toFixed(1) }}%</span>
+                <span class="text-xs text-gray-500">{{ ((stats?.input_tokens || 0) / (stats?.total_tokens || 1) * 100).toFixed(1) }}%</span>
               </div>
               <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
                 <div 
                   class="bg-blue-500 h-2 rounded-full" 
-                  :style="`width: ${(stats.input_tokens || 0) / (stats.total_tokens || 1) * 100}%`"
+                  :style="`width: ${(stats?.input_tokens || 0) / (stats?.total_tokens || 1) * 100}%`"
                 ></div>
               </div>
-              <p class="text-lg font-semibold text-gray-900">{{ (stats.input_tokens || 0).toLocaleString() }}</p>
+              <p class="text-lg font-semibold text-gray-900">{{ (stats?.input_tokens || 0).toLocaleString() }}</p>
             </div>
 
             <!-- Output Tokens -->
             <div class="bg-white rounded-lg p-4 border border-gray-200">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-gray-700">출력 토큰</span>
-                <span class="text-xs text-gray-500">{{ ((stats.output_tokens || 0) / (stats.total_tokens || 1) * 100).toFixed(1) }}%</span>
+                <span class="text-xs text-gray-500">{{ ((stats?.output_tokens || 0) / (stats?.total_tokens || 1) * 100).toFixed(1) }}%</span>
               </div>
               <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
                 <div 
                   class="bg-green-500 h-2 rounded-full" 
-                  :style="`width: ${(stats.output_tokens || 0) / (stats.total_tokens || 1) * 100}%`"
+                  :style="`width: ${(stats?.output_tokens || 0) / (stats?.total_tokens || 1) * 100}%`"
                 ></div>
               </div>
-              <p class="text-lg font-semibold text-gray-900">{{ (stats.output_tokens || 0).toLocaleString() }}</p>
+              <p class="text-lg font-semibold text-gray-900">{{ (stats?.output_tokens || 0).toLocaleString() }}</p>
             </div>
           </div>
         </div>
@@ -259,9 +267,19 @@ const formatDate = (dateString: string) => {
 };
 
 const loadStats = async () => {
+  console.log('📊 토큰 사용량 통계 로드 시작...');
   const userStats = await fetchUserStats();
+  console.log('📊 토큰 사용량 통계 로드 결과:', userStats);
   if (userStats) {
     stats.value = userStats;
+    console.log('✅ 토큰 사용량 통계 설정 완료:', {
+      total_tokens: userStats.total_tokens,
+      input_tokens: userStats.input_tokens,
+      output_tokens: userStats.output_tokens,
+      total_queries: userStats.total_queries
+    });
+  } else {
+    console.log('❌ 토큰 사용량 통계 로드 실패');
   }
 };
 

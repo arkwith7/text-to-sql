@@ -623,15 +623,21 @@ async def process_chat_query(
                 execution_time=execution_time
             )
             
-            # 분석 로깅
-            await analytics_service.log_query_execution(
+            # 분석 로깅 - 토큰 사용량 포함
+            token_usage = result.get('token_usage', {})
+            await analytics_service.log_query_execution_with_tokens(
                 query_id=str(uuid.uuid4()),
                 user_id=user_id,
                 question=query_request.question,
                 sql_query=result.get('sql_query', ''),
                 execution_time=execution_time,
                 row_count=len(result.get('results', [])),
-                success=True
+                success=True,
+                prompt_tokens=token_usage.get('prompt_tokens', 0),
+                completion_tokens=token_usage.get('completion_tokens', 0),
+                total_tokens=token_usage.get('total_tokens', 0),
+                llm_model=result.get('model', 'Azure OpenAI'),
+                llm_cost_estimate=0.0  # 비용 계산은 향후 구현
             )
             
             logger.info(
@@ -698,8 +704,12 @@ async def process_chat_query(
                 execution_time=execution_time
             )
             
-            # 오류 분석 로깅
-            await analytics_service.log_query_execution(
+            # 오류 분석 로깅 - 토큰 사용량 포함 (가능한 경우)
+            token_usage = {}
+            if 'result' in locals() and result and isinstance(result, dict):
+                token_usage = result.get('token_usage', {})
+            
+            await analytics_service.log_query_execution_with_tokens(
                 query_id=str(uuid.uuid4()),
                 user_id=user_id,
                 question=query_request.question,
@@ -707,7 +717,12 @@ async def process_chat_query(
                 execution_time=execution_time,
                 row_count=0,
                 success=False,
-                error_message=error_message
+                error_message=error_message,
+                prompt_tokens=token_usage.get('prompt_tokens', 0),
+                completion_tokens=token_usage.get('completion_tokens', 0),
+                total_tokens=token_usage.get('total_tokens', 0),
+                llm_model=result.get('model', 'Azure OpenAI') if 'result' in locals() and result else 'Azure OpenAI',
+                llm_cost_estimate=0.0
             )
             
             return ChatQueryResponse(

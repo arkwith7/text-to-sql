@@ -417,6 +417,13 @@ class LangChainTextToSQLAgent:
                 }
             )
             
+            # 토큰 사용량 정보 추가
+            token_info = {
+                "prompt_tokens": cb.prompt_tokens if cb else 0,
+                "completion_tokens": cb.completion_tokens if cb else 0,
+                "total_tokens": cb.total_tokens if cb else 0
+            }
+            
             response = {
                 "success": True,
                 "question": question,
@@ -427,7 +434,8 @@ class LangChainTextToSQLAgent:
                 "agent_type": "langchain_openai_functions",
                 "model": self.settings.azure_openai_deployment_name,
                 "simulation_mode": self.enable_simulation,
-                "explanation": output  # Agent의 답변을 설명으로도 사용
+                "explanation": output,  # Agent의 답변을 설명으로도 사용
+                "token_usage": token_info  # 토큰 사용량 정보 추가
             }
             
             if include_debug_info:
@@ -542,6 +550,13 @@ class LangChainTextToSQLAgent:
                 }
             )
             
+            # 토큰 사용량 정보 추가
+            token_info = {
+                "prompt_tokens": cb.prompt_tokens if cb else 0,
+                "completion_tokens": cb.completion_tokens if cb else 0,
+                "total_tokens": cb.total_tokens if cb else 0
+            }
+            
             response = {
                 "success": True,
                 "question": question,
@@ -549,7 +564,8 @@ class LangChainTextToSQLAgent:
                 "execution_time": execution_time,
                 "agent_type": "langchain_openai_functions_sync",
                 "model": self.settings.azure_openai_deployment_name,
-                "simulation_mode": self.enable_simulation
+                "simulation_mode": self.enable_simulation,
+                "token_usage": token_info  # 토큰 사용량 정보 추가
             }
             
             if include_debug_info:

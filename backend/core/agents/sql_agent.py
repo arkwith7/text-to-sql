@@ -293,7 +293,12 @@ class SQLAgent(BaseAgent):
                 "row_count": len(results),
                 "execution_time": execution_time,
                 "database": database,
-                "question": question
+                "question": question,
+                "token_usage": {  # Enhanced SQL Agent는 LLM을 사용하지 않으므로 토큰 사용량은 0
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0
+                }
             }
             
             if include_explanation:
@@ -319,7 +324,12 @@ class SQLAgent(BaseAgent):
                 "question": question,
                 "database": database,
                 "results": [],
-                "row_count": 0
+                "row_count": 0,
+                "token_usage": {  # 실패한 경우에도 토큰 정보 포함
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0
+                }
             }
     
     async def execute_query(

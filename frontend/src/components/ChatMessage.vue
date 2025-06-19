@@ -31,7 +31,15 @@
             <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-md">
               <div class="flex items-start">
                 <MessageSquare class="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
-                <div class="text-sm text-blue-800 leading-relaxed whitespace-pre-wrap">{{ message.content }}</div>
+                <div 
+                  v-if="message.type === 'assistant'"
+                  class="text-sm text-blue-800 leading-relaxed prose prose-sm prose-blue max-w-none"
+                  v-html="renderedContent"
+                ></div>
+                <div 
+                  v-else
+                  class="text-sm text-blue-800 leading-relaxed whitespace-pre-wrap"
+                >{{ message.content }}</div>
               </div>
             </div>
             
@@ -180,6 +188,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue';
+import MarkdownIt from 'markdown-it';
 import { 
   AlertCircle, 
   Copy, 
@@ -188,6 +197,14 @@ import {
   MessageSquare,
   Code
 } from 'lucide-vue-next';
+
+// 마크다운 파서 초기화
+const md = new MarkdownIt({
+  html: false, // HTML 태그 비활성화 (보안)
+  breaks: true, // 줄바꿈을 <br>로 변환
+  linkify: true, // 자동 링크 생성
+  typographer: true // 타이포그래피 개선
+});
 
 interface Message {
   id: string;
@@ -217,6 +234,15 @@ const displayData = computed(() => {
 
 const isComplexQueryError = computed(() => {
   return props.message.content?.includes('질문이 너무 복잡하거나 데이터베이스 구조에 맞는 답변을 찾지 못했습니다');
+});
+
+// 마크다운 렌더링
+const renderedContent = computed(() => {
+  if (props.message.type === 'user' || !props.message.content) {
+    return props.message.content;
+  }
+  // Assistant 메시지는 마크다운으로 렌더링
+  return md.render(props.message.content);
 });
 
 const copyQuery = async () => {
@@ -264,3 +290,127 @@ const formatTime = (date: Date): string => {
   });
 };
 </script>
+
+<style scoped>
+/* 마크다운 콘텐츠를 위한 커스텀 스타일 */
+.prose {
+  --tw-prose-body: #1e40af;
+  --tw-prose-headings: #1e3a8a;
+  --tw-prose-lead: #1e40af;
+  --tw-prose-links: #2563eb;
+  --tw-prose-bold: #1e3a8a;
+  --tw-prose-counters: #6b7280;
+  --tw-prose-bullets: #d1d5db;
+  --tw-prose-hr: #e5e7eb;
+  --tw-prose-quotes: #1e40af;
+  --tw-prose-quote-borders: #e5e7eb;
+  --tw-prose-captions: #6b7280;
+  --tw-prose-code: #1e3a8a;
+  --tw-prose-pre-code: #e5e7eb;
+  --tw-prose-pre-bg: #1f2937;
+  --tw-prose-th-borders: #d1d5db;
+  --tw-prose-td-borders: #e5e7eb;
+}
+
+.prose :deep(p) {
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+.prose :deep(p:first-child) {
+  margin-top: 0;
+}
+
+.prose :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.prose :deep(ul) {
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+  padding-left: 1.25em;
+}
+
+.prose :deep(ol) {
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+  padding-left: 1.25em;
+}
+
+.prose :deep(li) {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+}
+
+.prose :deep(code) {
+  background-color: #f3f4f6;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+
+.prose :deep(pre) {
+  background-color: #1f2937;
+  color: #e5e7eb;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+.prose :deep(blockquote) {
+  border-left: 4px solid #e5e7eb;
+  padding-left: 1rem;
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+  font-style: italic;
+}
+
+.prose :deep(h1), 
+.prose :deep(h2), 
+.prose :deep(h3), 
+.prose :deep(h4), 
+.prose :deep(h5), 
+.prose :deep(h6) {
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.prose :deep(h1:first-child), 
+.prose :deep(h2:first-child), 
+.prose :deep(h3:first-child), 
+.prose :deep(h4:first-child), 
+.prose :deep(h5:first-child), 
+.prose :deep(h6:first-child) {
+  margin-top: 0;
+}
+
+.prose :deep(strong) {
+  font-weight: 600;
+}
+
+.prose :deep(em) {
+  font-style: italic;
+}
+
+.prose :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+.prose :deep(th), 
+.prose :deep(td) {
+  border: 1px solid #e5e7eb;
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.prose :deep(th) {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+</style>

@@ -107,21 +107,6 @@
           </button>
 
           <button
-            @click="activeTab = 'tokens'"
-            :class="[
-              'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
-              activeTab === 'tokens' 
-                ? 'bg-blue-100 text-blue-700' 
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
-              isCollapsed ? 'justify-center' : ''
-            ]"
-            :title="isCollapsed ? '토큰 사용량' : ''"
-          >
-            <Activity class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
-            <span v-if="!isCollapsed">토큰 사용량</span>
-          </button>
-
-          <button
             @click="activeTab = 'profile'"
             :class="[
               'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
@@ -180,7 +165,6 @@
                activeTab === 'history' ? '대화 기록' : 
                activeTab === 'saved' ? '저장된 쿼리' : 
                activeTab === 'database' ? '분석 데이터 정보' :
-               activeTab === 'tokens' ? '토큰 사용량' :
                activeTab === 'profile' ? '사용자 프로필' : '새로운 질문' }}
           </h2>
           
@@ -344,13 +328,6 @@
         </div>
       </div>
 
-      <!-- Token Usage Tab -->
-      <div v-else-if="activeTab === 'tokens'" class="flex-1 overflow-y-auto">
-        <div class="p-6">
-          <TokenUsageWidget />
-        </div>
-      </div>
-
       <!-- Profile Tab -->
       <div v-else-if="activeTab === 'profile'" class="flex-1 p-6 overflow-y-auto">
         <UserProfile />
@@ -383,8 +360,7 @@ import {
   Send,
   User,
   Menu,
-  Database,
-  Activity
+  Database
 } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
 import { useApi } from '@/composables/useApi';
@@ -393,9 +369,8 @@ import { useStreaming } from '@/composables/useStreaming';
 import ChatMessage from './ChatMessage.vue';
 import UserProfile from './UserProfile.vue';
 import DatabaseInfo from './DatabaseInfo.vue';
-import TokenUsageWidget from './TokenUsageWidget.vue';
 import StreamingProgress from './StreamingProgress.vue';
-import type { QueryResponse, ChatMessage as ApiChatMessage } from '@/types/api';
+import type { QueryResponse } from '@/types/api';
 
 const router = useRouter();
 const { user, logout: authLogout } = useAuth();
@@ -403,13 +378,11 @@ const { loading } = useApi();
 const {
   currentSession,
   sessions,
-  messages: chatMessages,
   loading: chatLoading,
   hasActiveSession,
   createNewSession,
   loadUserSessions,
   switchToSession,
-  addMessageToSession,
   deleteSession,
   clearCurrentSession
 } = useChatSession();
