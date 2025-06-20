@@ -64,7 +64,11 @@ class Settings(BaseSettings):
     redis_ssl: bool = Field(default=False, description="Use SSL for Redis connection")
     
     # Security Configuration
-    secret_key: str = Field(..., env="SECRET_KEY")
+    secret_key: str = Field(
+        default="your-secret-key-change-in-production",
+        description="Application secret key",
+        alias="SECRET_KEY"
+    )
     jwt_secret_key: str = Field(
         default="your-secret-key-change-in-production-with-256-bit-key",
         description="JWT signing secret key",

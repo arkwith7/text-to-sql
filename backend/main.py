@@ -167,6 +167,11 @@ async def lifespan(app: FastAPI):
         await db_manager.test_connections()
         logger.info("✅ 데이터베이스 연결 테스트 완료")
         
+        # Database schema fix for database_schemas table
+        from database_migration_fix import fix_database_schemas_table
+        fix_database_schemas_table()
+        logger.info("✅ 데이터베이스 스키마 검증 완료")
+        
         # 시스템 상태 로깅
         logger.info("📊 시스템 상태:")
         logger.info(f"  - 기본 Agent (sql_agent): {'✅ 활성' if app.state.sql_agent else '❌ 비활성'}")

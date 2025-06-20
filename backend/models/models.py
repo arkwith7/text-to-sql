@@ -194,20 +194,33 @@ class QueryTemplate(Base):
         return f"<QueryTemplate(id='{self.id}', name='{self.name}', public='{self.is_public}')>"
 
 class DatabaseSchema(Base):
-    """Database schema information cache."""
+    """Database schema information cache with LLM documentation."""
     
     __tablename__ = "database_schemas"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    database_name = Column(String(100), nullable=False)
-    table_name = Column(String(100), nullable=False)
-    schema_info = Column(JSON, nullable=False)
+    connection_id = Column(String(36), ForeignKey("database_connections.id", ondelete="CASCADE"), nullable=False)
+    schema_hash = Column(String(64), nullable=False)  # 스키마 변경 감지용 해시
+    raw_schema = Column(JSON, nullable=False)  # 원본 스키마 정보
+    generated_documentation = Column(Text, nullable=True)  # LLM이 생성한 문서화
+    table_count = Column(Integer, nullable=True)
+    total_columns = Column(Integer, nullable=True)
     last_updated = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    
+    # Legacy fields for backward compatibility (deprecated)
+    database_name = Column(String(100), nullable=True)
+    table_name = Column(String(100), nullable=True)
+    schema_info = Column(JSON, nullable=True)
     row_count = Column(Integer, nullable=True)
-    table_size = Column(String(50), nullable=True)  # Human readable size
+    table_size = Column(String(50), nullable=True)
+    
+    # Relationships
+    connection = relationship("DatabaseConnection", back_populates="schemas")
     
     def __repr__(self):
-        return f"<DatabaseSchema(database='{self.database_name}', table='{self.table_name}')>"
+        return f"<DatabaseSchema(connection_id='{self.connection_id}', tables={self.table_count})>"
 
 class AuditLog(Base):
     """Audit log model for security and compliance."""
@@ -318,6 +331,7 @@ class DatabaseConnection(Base):
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="database_connections")
+    schemas = relationship("DatabaseSchema", back_populates="connection", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<DatabaseConnection(id={self.id}, name='{self.connection_name}', user='{self.user_id}')>"
