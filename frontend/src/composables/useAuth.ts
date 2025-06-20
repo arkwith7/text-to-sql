@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { ref, computed } from 'vue';
-import type { User, UserCreate, UserLogin, Token, TokenUsageStats } from '@/types/api';
+import type { User, UserCreate, UserLogin, Token, TokenUsageStats, ModelStatsResponse } from '@/types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -167,6 +167,24 @@ export function useAuth() {
     }
   };
 
+  const fetchModelStats = async (): Promise<ModelStatsResponse | null> => {
+    if (!token.value) return null;
+
+    loading.value = true;
+    error.value = null;
+
+    try {
+      const response = await api.get<ModelStatsResponse>('/api/v1/auth/model-stats');
+      return response.data;
+    } catch (err: any) {
+      error.value = err.response?.data?.detail || 'Failed to fetch model stats';
+      console.error('Model stats fetch error:', err);
+      return null;
+    } finally {
+      loading.value = false;
+    }
+  };
+
   // Initialize auth state on page load
   const initializeAuth = async () => {
     console.log('🔄 initializeAuth 호출됨', {
@@ -196,6 +214,7 @@ export function useAuth() {
     logout,
     fetchUserProfile,
     fetchUserStats,
+    fetchModelStats,
     initializeAuth,
     
     // API instance for other composables

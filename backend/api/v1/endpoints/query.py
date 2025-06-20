@@ -344,7 +344,7 @@ async def execute_query(
             # Analytics service를 통해 쿼리 실행 기록
             if hasattr(request.app.state, 'analytics_service'):
                 analytics_service = request.app.state.analytics_service
-                await analytics_service.log_query_execution(
+                await analytics_service.log_query_execution_with_tokens(
                     query_id=str(uuid.uuid4()),
                     user_id=current_user.get("id"),
                     question=query_request.question,
@@ -353,7 +353,11 @@ async def execute_query(
                     row_count=len(result.get("results", [])),
                     success=True,
                     error_message=None,
-                    chart_type=None
+                    chart_type=None,
+                    prompt_tokens=token_usage.get("prompt_tokens", 0),
+                    completion_tokens=token_usage.get("completion_tokens", 0),
+                    total_tokens=token_usage.get("total_tokens", 0),
+                    llm_model=result.get("model", "gpt-4o-mini")
                 )
         
         return QueryResponse(
@@ -375,7 +379,7 @@ async def execute_query(
         if hasattr(request.app.state, 'analytics_service'):
             analytics_service = request.app.state.analytics_service
             
-            await analytics_service.log_query_execution(
+            await analytics_service.log_query_execution_with_tokens(
                 query_id=str(uuid.uuid4()),
                 user_id=current_user.get("id"),
                 question=query_request.question,
@@ -384,7 +388,11 @@ async def execute_query(
                 row_count=0,
                 success=False,
                 error_message=str(e),
-                chart_type=None
+                chart_type=None,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                llm_model="gpt-4o-mini"
             )
         
         return QueryResponse(

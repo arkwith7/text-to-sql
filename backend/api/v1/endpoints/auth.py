@@ -120,10 +120,12 @@ async def get_user_stats(
             "total_tokens": stats.get("total_tokens", 0),
             "input_tokens": stats.get("input_tokens", 0),
             "output_tokens": stats.get("output_tokens", 0),
+            "total_cost": stats.get("total_cost", 0.0),
             "last_query_at": stats.get("last_query_at"),
             "daily_usage": stats.get("daily_usage", {}),
             "monthly_usage": stats.get("monthly_usage", {}),
-            "average_tokens_per_query": stats.get("average_tokens_per_query", 0)
+            "average_tokens_per_query": stats.get("average_tokens_per_query", 0),
+            "average_cost_per_query": stats.get("average_cost_per_query", 0.0)
         }
     except Exception as e:
         # Return default stats if analytics service fails
@@ -200,4 +202,85 @@ async def logout(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Logout failed"
-        ) 
+        )
+
+@router.get("/model-stats")
+async def get_user_model_stats(
+    request: Request,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """사용자의 모델별 상세 통계 조회"""
+    try:
+        from services.model_stats_service import ModelStatsService
+        
+        # Get services from app state
+        db_manager = request.app.state.db_manager
+        model_stats_service = ModelStatsService(db_manager)
+        
+        user_id = current_user.get("id") if isinstance(current_user, dict) else current_user.id
+        
+        # 모델별 통계 조회
+        model_stats = await model_stats_service.get_user_model_stats(user_id)
+        
+        return model_stats
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get model statistics: {str(e)}"
+        )
+
+
+@router.get("/token-breakdown")
+async def get_user_token_breakdown(
+    request: Request,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """사용자의 토큰 사용 분석"""
+    try:
+        from services.model_stats_service import ModelStatsService
+        
+        # Get services from app state
+        db_manager = request.app.state.db_manager
+        model_stats_service = ModelStatsService(db_manager)
+        
+        user_id = current_user.get("id") if isinstance(current_user, dict) else current_user.id
+        
+        # 토큰 분석 조회
+        token_breakdown = await model_stats_service.get_user_token_breakdown(user_id)
+        
+        return token_breakdown
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get token breakdown: {str(e)}"
+        )
+
+
+@router.get("/daily-model-stats")
+async def get_user_daily_model_stats(
+    request: Request,
+    days: int = 30,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """사용자의 일별 모델 사용 통계"""
+    try:
+        from services.model_stats_service import ModelStatsService
+        
+        # Get services from app state
+        db_manager = request.app.state.db_manager
+        model_stats_service = ModelStatsService(db_manager)
+        
+        user_id = current_user.get("id") if isinstance(current_user, dict) else current_user.id
+        
+        # 일별 모델 통계 조회
+        daily_stats = await model_stats_service.get_user_daily_model_stats(user_id, days)
+        
+        return daily_stats
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get daily model statistics: {str(e)}"
+        )

@@ -109,7 +109,7 @@ class TokenUsageService:
                     completion_tokens=token_usage.get("completion_tokens", 0),
                     total_tokens=token_usage.get("total_tokens", 0),
                     llm_model=model_name,
-                    llm_cost_estimate=0.0,  # Could be calculated based on model pricing
+                    llm_cost_estimate=self._calculate_cost(token_usage, model_name),
                     created_at=datetime.utcnow()
                 )
                 
@@ -510,3 +510,21 @@ class TokenUsageService:
         except Exception as e:
             self.logger.error(f"Failed to record usage: {str(e)}")
             return False
+    
+    def _calculate_cost(self, token_usage: Dict[str, int], model_name: str) -> float:
+        """
+        토큰 사용량 기반 비용 계산
+        
+        Args:
+            token_usage: 토큰 사용량 정보
+            model_name: 모델명
+            
+        Returns:
+            계산된 비용 (USD)
+        """
+        try:
+            from core.utils.cost_calculator import calculate_cost_from_usage
+            return calculate_cost_from_usage(token_usage, model_name)
+        except Exception as e:
+            self.logger.error(f"비용 계산 실패: {e}")
+            return 0.0

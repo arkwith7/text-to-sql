@@ -224,6 +224,124 @@
         </button>
       </div>
     </div>
+
+    <!-- Model Usage Statistics -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div class="flex items-center justify-between mb-6">
+        <h3 class="text-lg font-semibold text-gray-900">모델별 사용 통계</h3>
+        <button
+          @click="loadModelStats"
+          class="flex items-center px-3 py-1 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+        >
+          <RotateCcw class="w-4 h-4 mr-1" />
+          새로고침
+        </button>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="!modelStats && loading" class="text-center py-12">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p class="text-gray-600">모델 사용 통계를 로드하는 중...</p>
+      </div>
+
+      <!-- Model Stats Content -->
+      <div v-else-if="modelStats" class="space-y-6">
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+            <div class="text-center">
+              <p class="text-sm font-medium text-blue-900">사용 모델</p>
+              <p class="text-2xl font-bold text-blue-700">{{ modelStats.summary.total_models_used }}</p>
+            </div>
+          </div>
+          
+          <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+            <div class="text-center">
+              <p class="text-sm font-medium text-green-900">총 비용</p>
+              <p class="text-xl font-bold text-green-700">${{ modelStats.summary.total_cost.toFixed(6) }}</p>
+            </div>
+          </div>
+          
+          <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+            <div class="text-center">
+              <p class="text-sm font-medium text-purple-900">평균 비용</p>
+              <p class="text-xl font-bold text-purple-700">${{ (modelStats.summary.avg_cost_per_query || 0).toFixed(6) }}</p>
+            </div>
+          </div>
+          
+          <div class="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
+            <div class="text-center">
+              <p class="text-sm font-medium text-orange-900">주 사용 모델</p>
+              <p class="text-sm font-bold text-orange-700">{{ modelStats.summary.most_used_model }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detailed Model Stats -->
+        <div class="space-y-4">
+          <h4 class="text-md font-semibold text-gray-900">모델별 상세 통계</h4>
+          
+          <div class="grid gap-4">
+            <div 
+              v-for="model in modelStats.models" 
+              :key="model.model_name"
+              class="bg-gray-50 rounded-lg p-4 border border-gray-200"
+            >
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center">
+                  <div class="w-3 h-3 rounded-full mr-3"
+                       :class="model.model_name === 'gpt-4o-mini' ? 'bg-green-500' : 'bg-blue-500'"></div>
+                  <h5 class="font-semibold text-gray-900">{{ model.model_name }}</h5>
+                </div>
+                <span class="text-sm text-gray-500">{{ model.query_count }}개 쿼리</span>
+              </div>
+              
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="text-center">
+                  <p class="text-xs text-gray-600">총 토큰</p>
+                  <p class="font-semibold text-gray-900">{{ model.total_tokens.toLocaleString() }}</p>
+                  <p class="text-xs text-gray-500">입력: {{ model.total_input_tokens.toLocaleString() }}</p>
+                  <p class="text-xs text-gray-500">출력: {{ model.total_output_tokens.toLocaleString() }}</p>
+                </div>
+                
+                <div class="text-center">
+                  <p class="text-xs text-gray-600">총 비용</p>
+                  <p class="font-semibold text-green-600">${{ model.total_cost.toFixed(6) }}</p>
+                  <p class="text-xs text-gray-500">입력: ${{ model.input_cost.toFixed(6) }}</p>
+                  <p class="text-xs text-gray-500">출력: ${{ model.output_cost.toFixed(6) }}</p>
+                </div>
+                
+                <div class="text-center">
+                  <p class="text-xs text-gray-600">평균 비용</p>
+                  <p class="font-semibold text-blue-600">${{ (model.avg_cost_per_query || 0).toFixed(6) }}</p>
+                  <p class="text-xs text-gray-500">토큰당: ${{ (model.cost_per_token || 0).toFixed(8) }}</p>
+                </div>
+                
+                <div class="text-center">
+                  <p class="text-xs text-gray-600">사용 기간</p>
+                  <p class="text-xs text-gray-700">{{ formatDate(model.first_used) }}</p>
+                  <p class="text-xs text-gray-500">~ {{ formatDate(model.last_used) }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error State -->
+      <div v-else class="text-center py-12">
+        <div class="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+          <AlertCircle class="w-6 h-6 text-gray-400" />
+        </div>
+        <p class="text-gray-600 mb-4">모델 사용 통계를 불러올 수 없습니다</p>
+        <button
+          @click="loadModelStats"
+          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          다시 시도
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -239,12 +357,13 @@ import {
   AlertCircle 
 } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
-import type { TokenUsageStats } from '@/types/api';
+import type { TokenUsageStats, ModelStatsResponse } from '@/types/api';
 
 const router = useRouter();
-const { user, token, error, logout: authLogout, fetchUserProfile, fetchUserStats, loading, initializeAuth } = useAuth();
+const { user, token, error, logout: authLogout, fetchUserProfile, fetchUserStats, fetchModelStats, loading, initializeAuth } = useAuth();
 
 const stats = ref<TokenUsageStats | null>(null);
+const modelStats = ref<ModelStatsResponse | null>(null);
 
 // 디버깅용 computed 속성들
 const debugInfo = computed(() => ({
@@ -280,6 +399,23 @@ const loadStats = async () => {
     });
   } else {
     console.log('❌ 토큰 사용량 통계 로드 실패');
+  }
+};
+
+// 모델별 통계 로드 함수
+const loadModelStats = async () => {
+  console.log('📊 모델별 통계 로드 시작...');
+  const modelStatsData = await fetchModelStats();
+  console.log('📊 모델별 통계 로드 결과:', modelStatsData);
+  if (modelStatsData) {
+    modelStats.value = modelStatsData;
+    console.log('✅ 모델별 통계 설정 완료:', {
+      total_models: modelStatsData.summary.total_models_used,
+      total_cost: modelStatsData.summary.total_cost,
+      models: modelStatsData.models.length
+    });
+  } else {
+    console.log('❌ 모델별 통계 로드 실패');
   }
 };
 
@@ -342,5 +478,8 @@ onMounted(async () => {
   
   // 사용량 통계 로드
   await loadStats();
+  
+  // 모델별 통계 로드
+  await loadModelStats();
 });
 </script>

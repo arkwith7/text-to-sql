@@ -75,7 +75,8 @@ class LangChainTextToSQLAgent:
             azure_deployment=self.settings.azure_openai_deployment_name,
             temperature=model_temperature,
             max_tokens=2000,
-            streaming=False  # 스트리밍 비활성화
+            streaming=False,  # 스트리밍 비활성화
+            model_kwargs={"seed": 42}  # 일관된 결과를 위한 시드
         )
         logger.info("✅ Azure OpenAI LLM 초기화 완료")
         

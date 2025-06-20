@@ -115,3 +115,36 @@ export interface SessionMessagesResponse {
   messages: ChatMessage[];
   total_count: number;
 }
+
+// Model Statistics Types
+export interface ModelStats {
+  model_name: string;
+  query_count: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_tokens: number;
+  total_cost: number;
+  avg_cost_per_query: number;
+  avg_tokens_per_query: number;
+  cost_per_token: number;
+  input_cost: number;
+  output_cost: number;
+  first_used: string;
+  last_used: string;
+}
+
+export interface ModelStatsSummary {
+  total_models_used: number;
+  total_cost: number;
+  total_tokens: number;
+  total_queries: number;
+  avg_cost_per_query: number;
+  avg_tokens_per_query: number;
+  most_used_model: string;
+  most_expensive_model: string;
+}
+
+export interface ModelStatsResponse {
+  models: ModelStats[];
+  summary: ModelStatsSummary;
+}

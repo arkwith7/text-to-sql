@@ -108,8 +108,9 @@ class TokenEstimator:
                         prompt_tokens += self.count_tokens(tool_str)
                         prompt_tokens += 10  # function call 오버헤드
             
-            # 답변 토큰
-            completion_tokens = self.count_tokens(answer)
+            # 답변 토큰 (Text-to-SQL Agent의 실제 출력량을 반영하여 2.5배 가중치 적용)
+            base_completion_tokens = self.count_tokens(answer)
+            completion_tokens = int(base_completion_tokens * 2.5)  # Agent의 중간 생성물들을 고려한 가중치
             
             # 전체 대화 오버헤드
             prompt_tokens += 10
@@ -166,10 +167,11 @@ class TokenEstimator:
                 if isinstance(step, tuple) and len(step) >= 2:
                     action, observation = step[0], step[1]
                     
-                    # Action (도구 호출) 토큰
+                    # Action (도구 호출) 토큰 - 가중치 적용
                     if hasattr(action, 'tool') and hasattr(action, 'tool_input'):
                         tool_text = f"{action.tool}: {str(action.tool_input)}"
-                        additional_completion_tokens += self.count_tokens(tool_text)
+                        base_tokens = self.count_tokens(tool_text)
+                        additional_completion_tokens += int(base_tokens * 2.5)  # 가중치 적용
                     
                     # Observation (도구 결과) 토큰
                     observation_text = str(observation)

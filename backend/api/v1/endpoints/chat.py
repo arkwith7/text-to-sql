@@ -17,6 +17,7 @@ from services.auth_dependencies import get_current_user
 from services.auth_service import UserResponse
 from services.chat_service import ChatSessionService
 from services.token_usage_service import TokenUsageService
+from core.utils.cost_calculator import calculate_cost_from_usage
 from utils.logging_config import ChatLogger, RequestLogger
 
 logger = logging.getLogger(__name__)
@@ -510,7 +511,7 @@ async def process_chat_query(
                         'success': True,
                         'agent_info': {
                             'agent_type': result.get('agent_type', 'langchain'),
-                            'model': result.get('model', 'Azure OpenAI'),
+                            'model': result.get('model', 'gpt-4o-mini'),
                             'execution_time': result.get('execution_time', 0)
                         }
                     }
@@ -636,8 +637,14 @@ async def process_chat_query(
                 prompt_tokens=token_usage.get('prompt_tokens', 0),
                 completion_tokens=token_usage.get('completion_tokens', 0),
                 total_tokens=token_usage.get('total_tokens', 0),
-                llm_model=result.get('model', 'Azure OpenAI'),
-                llm_cost_estimate=0.0  # 비용 계산은 향후 구현
+                llm_model=result.get('model', 'gpt-4o-mini'),
+                llm_cost_estimate=calculate_cost_from_usage(
+                    {
+                        'prompt_tokens': token_usage.get('prompt_tokens', 0),
+                        'completion_tokens': token_usage.get('completion_tokens', 0)
+                    },
+                    result.get('model', 'gpt-4o-mini')
+                )
             )
             
             logger.info(
@@ -721,8 +728,14 @@ async def process_chat_query(
                 prompt_tokens=token_usage.get('prompt_tokens', 0),
                 completion_tokens=token_usage.get('completion_tokens', 0),
                 total_tokens=token_usage.get('total_tokens', 0),
-                llm_model=result.get('model', 'Azure OpenAI') if 'result' in locals() and result else 'Azure OpenAI',
-                llm_cost_estimate=0.0
+                llm_model=result.get('model', 'gpt-4o-mini') if 'result' in locals() and result else 'gpt-4o-mini',
+                llm_cost_estimate=calculate_cost_from_usage(
+                    {
+                        'prompt_tokens': token_usage.get('prompt_tokens', 0),
+                        'completion_tokens': token_usage.get('completion_tokens', 0)
+                    },
+                    result.get('model', 'gpt-4o-mini') if 'result' in locals() and result else 'gpt-4o-mini'
+                )
             )
             
             return ChatQueryResponse(

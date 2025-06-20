@@ -17,6 +17,7 @@ from enum import Enum
 import json
 import uuid
 from fastapi import Request
+from core.utils.cost_calculator import calculate_cost_from_usage
 
 from database.connection_manager import DatabaseManager
 from core.config import get_settings
@@ -91,7 +92,12 @@ class AnalyticsService:
         row_count: int,
         success: bool,
         error_message: Optional[str] = None,
-        chart_type: Optional[str] = None
+        chart_type: Optional[str] = None,
+        prompt_tokens: Optional[int] = None,
+        completion_tokens: Optional[int] = None,
+        total_tokens: Optional[int] = None,
+        llm_model: Optional[str] = None,
+        llm_cost_estimate: Optional[float] = None
     ):
         """Log a query execution event."""
         try:
@@ -117,11 +123,11 @@ class AnalyticsService:
                 "chart_type": chart_type,
                 "timestamp": current_time,
                 "created_at": current_time,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-                "llm_model": None,
-                "llm_cost_estimate": 0.0
+                "prompt_tokens": prompt_tokens or 0,
+                "completion_tokens": completion_tokens or 0,
+                "total_tokens": total_tokens or 0,
+                "llm_model": llm_model,
+                "llm_cost_estimate": llm_cost_estimate or 0.0
             }
 
             await self.db_manager.execute_query_safe(
@@ -286,7 +292,11 @@ class AnalyticsService:
                 SUM(CASE WHEN success THEN 1 ELSE 0 END) as successful_queries,
                 AVG(execution_time) as avg_execution_time,
                 MIN(timestamp) as first_query,
-                MAX(timestamp) as last_query
+                MAX(timestamp) as last_query,
+                COALESCE(SUM(total_tokens), 0) as total_tokens,
+                COALESCE(SUM(prompt_tokens), 0) as input_tokens,
+                COALESCE(SUM(completion_tokens), 0) as output_tokens,
+                COALESCE(SUM(llm_cost_estimate), 0) as total_cost
             FROM query_analytics WHERE user_id = :user_id
             """
             
@@ -366,14 +376,16 @@ class AnalyticsService:
     async def get_user_stats(self, user_id: str) -> Dict[str, Any]:
         """Get comprehensive user statistics including token usage."""
         try:
-            # Get basic query statistics
+            # Get basic query statistics with cost information
             stats_query = """
             SELECT 
                 COUNT(*) as total_queries,
                 SUM(CASE WHEN success THEN 1 ELSE 0 END) as successful_queries,
                 AVG(execution_time) as avg_execution_time,
                 SUM(row_count) as total_rows_processed,
-                MAX(timestamp) as last_query_at
+                MAX(timestamp) as last_query_at,
+                SUM(COALESCE(llm_cost_estimate, 0)) as total_cost,
+                AVG(COALESCE(llm_cost_estimate, 0)) as avg_cost_per_query
             FROM query_analytics WHERE user_id = :user_id
             """
             
@@ -402,7 +414,8 @@ class AnalyticsService:
             SELECT 
                 COALESCE(SUM(CAST(total_tokens AS INTEGER)), 0) as total_tokens,
                 COALESCE(SUM(CAST(prompt_tokens AS INTEGER)), 0) as input_tokens,
-                COALESCE(SUM(CAST(completion_tokens AS INTEGER)), 0) as output_tokens
+                COALESCE(SUM(CAST(completion_tokens AS INTEGER)), 0) as output_tokens,
+                COALESCE(SUM(llm_cost_estimate), 0.0) as total_cost
             FROM query_analytics 
             WHERE user_id = :user_id AND total_tokens > 0
             """
@@ -413,22 +426,24 @@ class AnalyticsService:
                 database_type="app"
             )
             
-            token_stats = {"total_tokens": 0, "input_tokens": 0, "output_tokens": 0}
+            token_stats = {"total_tokens": 0, "input_tokens": 0, "output_tokens": 0, "total_cost": 0.0}
             if token_result['success'] and token_result['data']:
                 token_stats = token_result['data'][0]
             
             # Get daily usage for the last 30 days
             daily_usage_query = """
             SELECT 
-                DATE(qa.timestamp) as date,
+                DATE(timestamp) as date,
                 COUNT(*) as queries,
-                COALESCE(SUM(CAST(JSON_EXTRACT(e.event_data, '$.tokens_used') AS INTEGER)), 0) as tokens
-            FROM query_analytics qa
-            LEFT JOIN events e ON qa.user_id = e.user_id AND DATE(qa.timestamp) = DATE(e.timestamp)
-            WHERE qa.user_id = :user_id 
-            AND qa.timestamp >= DATE('now', '-30 days')
-            GROUP BY DATE(qa.timestamp)
-            ORDER BY DATE(qa.timestamp)
+                COALESCE(SUM(total_tokens), 0) as tokens,
+                COALESCE(SUM(llm_cost_estimate), 0.0) as cost
+            FROM query_analytics
+            
+            WHERE user_id = :user_id 
+            AND timestamp >= DATE('now', '-30 days')
+            AND total_tokens > 0
+            GROUP BY DATE(timestamp)
+            ORDER BY DATE(timestamp)
             """
             
             daily_result = await self.db_manager.execute_query_safe(
@@ -442,7 +457,8 @@ class AnalyticsService:
                 for row in daily_result['data']:
                     daily_usage[row['date']] = {
                         'queries': row['queries'],
-                        'tokens': row['tokens'] or 0
+                        'tokens': row['tokens'] or 0,
+                        'cost': round(row.get('cost', 0.0), 6)
                     }
             
             # Calculate average tokens per query
@@ -451,14 +467,17 @@ class AnalyticsService:
             avg_tokens = total_tokens / total_queries if total_queries > 0 else 0
             
             return {
+                "user_id": user_id,
                 "total_queries": stats.get('total_queries', 0),
                 "total_tokens": token_stats.get('total_tokens', 0),
                 "input_tokens": token_stats.get('input_tokens', 0),
                 "output_tokens": token_stats.get('output_tokens', 0),
+                "total_cost": round(stats.get('total_cost', 0.0), 6),
                 "last_query_at": stats.get('last_query_at'),
                 "daily_usage": daily_usage,
                 "monthly_usage": {},  # Could implement monthly aggregation if needed
-                "average_tokens_per_query": round(avg_tokens, 2)
+                "average_tokens_per_query": round(avg_tokens, 2),
+                "average_cost_per_query": round(stats.get('avg_cost_per_query', 0.0), 6)
             }
             
         except Exception as e:
@@ -469,10 +488,12 @@ class AnalyticsService:
                 "total_tokens": 0,
                 "input_tokens": 0,
                 "output_tokens": 0,
+                "total_cost": 0.0,
                 "last_query_at": None,
                 "daily_usage": {},
                 "monthly_usage": {},
-                "average_tokens_per_query": 0
+                "average_tokens_per_query": 0,
+                "average_cost_per_query": 0.0
             }
     
     async def get_system_metrics(self) -> SystemMetrics:
@@ -747,6 +768,20 @@ class AnalyticsService:
     ):
         """Log a query execution event with token usage information."""
         try:
+            # 토큰 정보가 있으면 실제 비용 계산
+            if total_tokens > 0 and llm_model:
+                calculated_cost = calculate_cost_from_usage(
+                    {
+                        'prompt_tokens': prompt_tokens,
+                        'completion_tokens': completion_tokens,
+                        'total_tokens': total_tokens
+                    },
+                    llm_model
+                )
+                # 계산된 비용이 0이 아니면 사용, 그렇지 않으면 기존 값 유지
+                if calculated_cost > 0:
+                    llm_cost_estimate = calculated_cost
+            
             insert_query = """
             INSERT INTO query_analytics (
                 id, query_id, user_id, question, sql_query, execution_time,
@@ -800,3 +835,143 @@ class AnalyticsService:
             
         except Exception as e:
             logger.error(f"Error logging query execution with tokens: {str(e)}")
+
+    async def get_user_model_stats(self, user_id: str) -> Dict[str, Any]:
+        """Get detailed model usage statistics for a user."""
+        try:
+            # Get model breakdown statistics
+            model_stats_query = """
+            SELECT 
+                COALESCE(llm_model, 'Unknown') as model_name,
+                COUNT(*) as query_count,
+                SUM(COALESCE(prompt_tokens, 0)) as total_input_tokens,
+                SUM(COALESCE(completion_tokens, 0)) as total_output_tokens,
+                SUM(COALESCE(total_tokens, 0)) as total_tokens,
+                SUM(COALESCE(llm_cost_estimate, 0)) as total_cost,
+                AVG(COALESCE(llm_cost_estimate, 0)) as avg_cost_per_query,
+                AVG(COALESCE(total_tokens, 0)) as avg_tokens_per_query,
+                MIN(created_at) as first_used,
+                MAX(created_at) as last_used
+            FROM query_analytics 
+            WHERE user_id = :user_id 
+            AND llm_model IS NOT NULL 
+            AND total_tokens > 0
+            GROUP BY llm_model
+            ORDER BY total_cost DESC
+            """
+            
+            result = await self.db_manager.execute_query_safe(
+                model_stats_query,
+                params={"user_id": user_id},
+                database_type="app"
+            )
+            
+            models_breakdown = []
+            if result['success'] and result['data']:
+                for row in result['data']:
+                    # Calculate cost breakdown
+                    input_cost = (row['total_input_tokens'] / 1000) * self._get_model_input_rate(row['model_name'])
+                    output_cost = (row['total_output_tokens'] / 1000) * self._get_model_output_rate(row['model_name'])
+                    
+                    models_breakdown.append({
+                        'model_name': row['model_name'],
+                        'query_count': row['query_count'],
+                        'total_tokens': row['total_tokens'],
+                        'input_tokens': row['total_input_tokens'],
+                        'output_tokens': row['total_output_tokens'],
+                        'total_cost': round(row['total_cost'], 6),
+                        'input_cost': round(input_cost, 6),
+                        'output_cost': round(output_cost, 6),
+                        'avg_cost_per_query': round(row['avg_cost_per_query'], 6),
+                        'avg_tokens_per_query': round(row['avg_tokens_per_query'], 2),
+                        'first_used': row['first_used'],
+                        'last_used': row['last_used'],
+                        'cost_per_token': round(row['total_cost'] / row['total_tokens'], 8) if row['total_tokens'] > 0 else 0
+                    })
+            
+            # Get token type breakdown (전체)
+            token_breakdown_query = """
+            SELECT 
+                SUM(COALESCE(prompt_tokens, 0)) as total_input_tokens,
+                SUM(COALESCE(completion_tokens, 0)) as total_output_tokens,
+                SUM(COALESCE(total_tokens, 0)) as total_tokens,
+                SUM(COALESCE(llm_cost_estimate, 0)) as total_cost
+            FROM query_analytics 
+            WHERE user_id = :user_id AND total_tokens > 0
+            """
+            
+            token_result = await self.db_manager.execute_query_safe(
+                token_breakdown_query,
+                params={"user_id": user_id},
+                database_type="app"
+            )
+            
+            token_breakdown = {
+                'total_input_tokens': 0,
+                'total_output_tokens': 0,
+                'total_tokens': 0,
+                'input_cost': 0.0,
+                'output_cost': 0.0,
+                'total_cost': 0.0
+            }
+            
+            if token_result['success'] and token_result['data']:
+                data = token_result['data'][0]
+                # 전체 토큰별 비용 (주로 사용되는 모델 기준으로 계산)
+                primary_model = models_breakdown[0]['model_name'] if models_breakdown else 'gpt-4o-mini'
+                input_cost = (data['total_input_tokens'] / 1000) * self._get_model_input_rate(primary_model)
+                output_cost = (data['total_output_tokens'] / 1000) * self._get_model_output_rate(primary_model)
+                
+                token_breakdown = {
+                    'total_input_tokens': data['total_input_tokens'],
+                    'total_output_tokens': data['total_output_tokens'],
+                    'total_tokens': data['total_tokens'],
+                    'input_cost': round(input_cost, 6),
+                    'output_cost': round(output_cost, 6),
+                    'total_cost': round(data['total_cost'], 6),
+                    'input_cost_per_1k': self._get_model_input_rate(primary_model),
+                    'output_cost_per_1k': self._get_model_output_rate(primary_model)
+                }
+            
+            return {
+                'models_breakdown': models_breakdown,
+                'token_breakdown': token_breakdown,
+                'summary': {
+                    'total_models_used': len(models_breakdown),
+                    'primary_model': models_breakdown[0]['model_name'] if models_breakdown else None,
+                    'most_expensive_model': max(models_breakdown, key=lambda x: x['total_cost'])['model_name'] if models_breakdown else None,
+                    'most_used_model': max(models_breakdown, key=lambda x: x['query_count'])['model_name'] if models_breakdown else None
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting user model stats: {str(e)}")
+            return {
+                'models_breakdown': [],
+                'token_breakdown': {
+                    'total_input_tokens': 0,
+                    'total_output_tokens': 0,
+                    'total_tokens': 0,
+                    'input_cost': 0.0,
+                    'output_cost': 0.0,
+                    'total_cost': 0.0
+                },
+                'summary': {
+                    'total_models_used': 0,
+                    'primary_model': None,
+                    'most_expensive_model': None,
+                    'most_used_model': None
+                }
+            }
+    
+    def _get_model_input_rate(self, model_name: str) -> float:
+        """Get input token rate for a model."""
+        from core.utils.cost_calculator import ModelPricing
+        pricing = ModelPricing.get_model_pricing(model_name)
+        return pricing.get('input_price_per_1k', 0.001)
+    
+    def _get_model_output_rate(self, model_name: str) -> float:
+        """Get output token rate for a model."""
+        from core.utils.cost_calculator import ModelPricing
+        pricing = ModelPricing.get_model_pricing(model_name)
+        return pricing.get('output_price_per_1k', 0.002)
