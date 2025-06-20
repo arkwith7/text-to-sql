@@ -223,7 +223,10 @@ elif docker ps -a --format "{{.Names}}" | grep -q "^${POSTGRES_CONTAINER_NAME}$"
 else
     echo "🚀 PostgreSQL container not found. Creating and starting a new one..."
     
-    # Create PostgreSQL container with settings from .env
+    # Create PostgreSQL container with settings from .env (using named volume for persistence)
+    echo "📁 Creating named volume for data persistence..."
+    docker volume create postgres_data 2>/dev/null || true
+    
     docker run -d \
         --name ${POSTGRES_CONTAINER_NAME} \
         -e POSTGRES_USER=${DB_USER} \

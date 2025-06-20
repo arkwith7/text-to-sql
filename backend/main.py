@@ -37,14 +37,14 @@ try:
     from core import SQLAgent
     _sql_agent_available = True
 except ImportError as e:
-    logger.warning(f"SQL Agent import 실패: {e}")
+    print(f"SQL Agent import 실패: {e}")  # logger가 아직 정의되지 않았으므로 print 사용
     _sql_agent_available = False
 
 try:
     from core import LangChainTextToSQLAgent
     _langchain_agent_available = True
 except ImportError as e:
-    logger.warning(f"LangChain Agent import 실패: {e}")
+    print(f"LangChain Agent import 실패: {e}")  # logger가 아직 정의되지 않았으므로 print 사용
     _langchain_agent_available = False
 
 from services.auth_service import AuthService
@@ -54,12 +54,28 @@ from services.chat_service import ChatSessionService
 from utils.cache import cache
 from api.v1.api import api_router
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Configure logging - 개선된 로깅 설정
+try:
+    from utils.logging_config import setup_logging
+    setup_logging()
+    logger = logging.getLogger(__name__)
+    logger.info("✅ 개선된 로깅 설정 적용 완료")
+except ImportError as e:
+    # 개선된 로깅이 실패하면 기본 로깅으로 대체
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    logger.warning(f"기본 로깅 사용 (개선된 로깅 실패): {e}")
+except Exception as e:
+    # 예상치 못한 오류가 발생하면 기본 로깅으로 대체
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    logger.warning(f"기본 로깅 사용 (예상치 못한 오류): {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

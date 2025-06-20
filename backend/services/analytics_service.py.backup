@@ -401,10 +401,10 @@ class AnalyticsService:
             token_query = """
             SELECT 
                 COALESCE(SUM(CAST(total_tokens AS INTEGER)), 0) as total_tokens,
-                COALESCE(SUM(CAST(prompt_tokens AS INTEGER)), 0) as input_tokens,
-                COALESCE(SUM(CAST(completion_tokens AS INTEGER)), 0) as output_tokens
-            FROM query_analytics 
-            WHERE user_id = :user_id AND total_tokens > 0
+                COALESCE(SUM(CAST(JSON_EXTRACT(event_data, '$.input_tokens') AS INTEGER)), 0) as input_tokens,
+                COALESCE(SUM(CAST(JSON_EXTRACT(event_data, '$.output_tokens') AS INTEGER)), 0) as output_tokens
+            FROM events 
+            WHERE user_id = :user_id AND event_type = 'query_executed'
             """
             
             token_result = await self.db_manager.execute_query_safe(
@@ -492,7 +492,7 @@ class AnalyticsService:
             # Active users today
             active_users_query = """
             SELECT COUNT(DISTINCT user_id) as active_users
-            FROM query_analytics
+            FROM events
             WHERE DATE(timestamp) = :today
             """
             
