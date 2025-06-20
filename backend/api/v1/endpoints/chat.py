@@ -51,6 +51,10 @@ class ChatMessageResponse(BaseModel):
 # Enhanced Chat Query Models
 class ChatQueryRequest(BaseModel):
     question: str = Field(..., description="Natural language question")
+    connection_id: Optional[str] = Field(
+        None,
+        description="분석할 데이터베이스 연결 ID (생략 시 기본 northwind 사용)",
+    )
     context: Optional[str] = Field(None, description="Additional context for the query")
     include_explanation: bool = Field(default=True, description="Include SQL explanation")
     max_rows: Optional[int] = Field(default=100, description="Maximum rows to return")
@@ -407,6 +411,7 @@ async def process_chat_query(
         chat_service: ChatSessionService = request.app.state.chat_service
         sql_agent = request.app.state.sql_agent
         analytics_service = request.app.state.analytics_service
+        db_manager = request.app.state.db_manager
         
         # 세션 검증 로깅
         session = await chat_service.get_session(session_id, user_id)
@@ -439,6 +444,14 @@ async def process_chat_query(
             extra={'request_id': request_id, 'session_id': session_id, 'history_count': len(chat_history)}
         )
         
+        # 데이터베이스 엔진 준비 (connection_id가 전달된 경우 동적 엔진 사용)
+        analysis_engine = None
+        if query_request.connection_id:
+            analysis_engine = await db_manager.get_analysis_db_engine(
+                connection_id=query_request.connection_id,
+                user_id=user_id,
+            )
+
         # Enhanced Agent 선택 및 실행 로깅
         start_time = time.time()
         agent_used = "enhanced"  # 기본값
@@ -481,85 +494,46 @@ async def process_chat_query(
         )
         
         try:
-            # Agent 타입에 따른 실행 방식 선택
-            if agent_used.startswith("langchain"):
-                # LangChain Agent 실행 (비동기)
+            # --- 에이전트 유형별 실행 ---
+            is_langchain_agent = type(selected_agent).__name__ == 'LangChainTextToSQLAgent'
+
+            if is_langchain_agent:
+                # LangChain Agent 는 여전히 northwind 고정 (추후 개선)
                 result = await selected_agent.execute_query(
                     question=query_request.question,
                     user_id=str(user_id),
-                    include_debug_info=False
+                    include_debug_info=False,
                 )
-                
-                # LangChain 결과를 표준 형식으로 변환
-                if result.get('success'):
-                    # LangChain Agent에서 추출한 SQL 쿼리와 결과 사용
-                    sql_query = result.get('sql_query', '')
-                    sql_results = result.get('results', [])
-                    
-                    # SQL 쿼리가 없으면 기본 메시지 사용
-                    if not sql_query:
-                        sql_query = "LangChain Agent로 처리됨"
-                    
-                    # 결과가 없으면 답변만 포함
-                    if not sql_results:
-                        sql_results = [{"answer": result.get('answer', '')}]
-                    
-                    converted_result = {
-                        'sql_query': sql_query,
-                        'results': sql_results,
-                        'explanation': result.get('answer', ''),
-                        'success': True,
-                        'agent_info': {
-                            'agent_type': result.get('agent_type', 'langchain'),
-                            'model': result.get('model', 'gpt-4o-mini'),
-                            'execution_time': result.get('execution_time', 0)
-                        }
-                    }
-                    
-                    logger.info(
-                        f"🔧 LangChain 결과 변환 완료 - SQL: {sql_query[:50]}{'...' if len(sql_query) > 50 else ''}, 결과: {len(sql_results)}행",
-                        extra={
-                            'request_id': request_id,
-                            'session_id': session_id,
-                            'user_id': user_id,
-                            'original_sql': result.get('sql_query', 'N/A'),
-                            'original_results_count': len(result.get('results', [])),
-                            'converted_results_count': len(sql_results)
-                        }
-                    )
-                else:
-                    converted_result = {
-                        'sql_query': '',
-                        'results': [],
-                        'explanation': f"LangChain Agent 오류: {result.get('error', 'Unknown error')}",
-                        'success': False,
-                        'error': result.get('error', 'Unknown error')
-                    }
-                result = converted_result
-                
             else:
-                # Enhanced SQL Agent 실행 (동기/비동기 모두 지원)
-                # LangChain Agent 인스턴스인지 확인
-                is_langchain_agent = type(selected_agent).__name__ == 'LangChainTextToSQLAgent'
-                
-                if hasattr(selected_agent, 'execute_query_sync') and not is_langchain_agent:
-                    # 동기 실행 (Enhanced SQL Agent용)
-                    result = selected_agent.execute_query_sync(
-                        question=query_request.question,
-                        database="northwind",
-                        include_explanation=query_request.include_explanation,
-                        max_rows=query_request.max_rows
-                    )
-                else:
-                    # 비동기 실행 (LangChain Agent 또는 기존 방식)
+                # Enhanced SQL Agent
+                if analysis_engine is not None:
+                    # 동적 연결 사용
                     result = await selected_agent.execute_query(
                         question=query_request.question,
-                        database="northwind",
+                        engine=analysis_engine,
                         context=query_request.context,
                         user_id=user_id,
                         include_explanation=query_request.include_explanation,
-                        max_rows=query_request.max_rows
+                        max_rows=query_request.max_rows,
                     )
+                else:
+                    # 기존 northwind 엔진 (execute_query_sync 지원)
+                    if hasattr(selected_agent, "execute_query_sync"):
+                        result = selected_agent.execute_query_sync(
+                            question=query_request.question,
+                            database="northwind",
+                            include_explanation=query_request.include_explanation,
+                            max_rows=query_request.max_rows,
+                        )
+                    else:
+                        result = await selected_agent.execute_query(
+                            question=query_request.question,
+                            database="northwind",
+                            context=query_request.context,
+                            user_id=user_id,
+                            include_explanation=query_request.include_explanation,
+                            max_rows=query_request.max_rows,
+                        )
             
             execution_time = time.time() - start_time
             

@@ -335,33 +335,69 @@ class SQLAgent(BaseAgent):
     async def execute_query(
         self,
         question: str,
-        database: str = "northwind",
+        engine, # SQLAlchemy AsyncEngine
         context: Optional[str] = None,
         user_id: Optional[int] = None,
         include_explanation: bool = True,
         include_debug_info: bool = False,
         max_rows: Optional[int] = None
     ) -> Dict[str, Any]:
-        """비동기 방식으로 쿼리를 실행합니다."""
-        result = self.execute_query_sync(
-            question=question,
-            database=database,
-            include_explanation=include_explanation,
-            max_rows=max_rows
-        )
+        """
+        Processes a natural language query using a dynamically provided database engine.
+        """
+        start_time = time.time()
+        query_id = str(uuid.uuid4())
         
-        # include_debug_info가 True이면 디버그 정보를 추가
-        if include_debug_info:
-            result["debug_info"] = {
-                "agent_type": "Enhanced SQL Agent",
-                "database": database,
-                "context": context,
-                "user_id": user_id,
-                "include_explanation": include_explanation,
-                "max_rows": max_rows
+        # 1. Generate SQL from the question (currently pattern-based)
+        sql_query, explanation = self._generate_sql(question)
+        
+        # If the generated SQL is just a message, return it directly
+        if "SELECT '" in sql_query:
+            return {
+                "success": False,
+                "question": question,
+                "sql_query": sql_query,
+                "results": [{"message": explanation}],
+                "explanation": explanation,
+                "execution_time": time.time() - start_time,
+                "row_count": 1,
+                "token_usage": None
             }
         
-        return result
+        # 2. Execute the SQL query using the provided engine
+        results = []
+        error_message = None
+        success = False
+        try:
+            async with engine.connect() as connection:
+                result_proxy = await connection.execute(sql_query)
+                results = [dict(row) for row in result_proxy.fetchall()]
+                if max_rows and len(results) > max_rows:
+                    results = results[:max_rows]
+                success = True
+            self.logger.info(f"Query executed successfully on dynamic engine. Rows: {len(results)}")
+        except Exception as e:
+            error_message = f"Error executing SQL: {str(e)}"
+            self.logger.error(error_message)
+            success = False
+
+        execution_time = time.time() - start_time
+
+        # Token usage would be calculated if an LLM was used for generation
+        token_usage = { "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0 }
+
+        return {
+            "success": success,
+            "question": question,
+            "sql_query": sql_query,
+            "results": results,
+            "explanation": explanation if include_explanation else None,
+            "execution_time": execution_time,
+            "row_count": len(results),
+            "error_message": error_message,
+            "token_usage": token_usage,
+            "query_id": query_id
+        }
     
     async def validate_query(
         self,

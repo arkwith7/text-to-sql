@@ -173,18 +173,47 @@
             <button
               v-if="activeTab === 'chat'"
               @click="startNewChat"
-              class="px-4 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
-            >새 대화 시작</button>
-            <!-- Connection Status -->
-            <div
-              class="flex items-center px-3 py-1 rounded-full text-sm"
-              :class="isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+              class="p-2 bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition-colors"
+              title="새 대화 시작"
             >
+              <!-- 말풍선 + 플러스 아이콘 (New Chat) -->
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v8m-4-4h8" />
+              </svg>
+            </button>
+            <!-- Connection Status & Settings -->
+            <div class="flex items-center space-x-2">
               <div
-                class="w-2 h-2 rounded-full mr-2"
-                :class="isConnected ? 'bg-green-500' : 'bg-red-500'"
-              ></div>
-              {{ isConnected ? 'Connected' : 'Disconnected' }}
+                class="flex items-center px-3 py-1 rounded-full text-sm"
+                :class="{
+                  'bg-green-100 text-green-800': selectedConnection?.status === 'connected',
+                  'bg-red-100 text-red-800': selectedConnection?.status === 'error' || !isConnected,
+                  'bg-yellow-100 text-yellow-800': selectedConnection?.status === 'testing',
+                  'bg-gray-100 text-gray-800': !selectedConnection?.status
+                }"
+                :title="getConnectionStatusText()"
+              >
+                <div
+                  class="w-2 h-2 rounded-full mr-2"
+                  :class="{
+                    'bg-green-500': selectedConnection?.status === 'connected',
+                    'bg-red-500': selectedConnection?.status === 'error' || !isConnected,
+                    'bg-yellow-500': selectedConnection?.status === 'testing',
+                    'bg-gray-400': !selectedConnection?.status
+                  }"
+                ></div>
+                <span v-if="isConnected && selectedConnection">{{ selectedConnection.connection_name }}</span>
+                <span v-else>UnConnected</span>
+              </div>
+              <!-- Settings Icon -->
+              <button
+                @click="isConnPanelOpen = true"
+                class="p-2 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                title="DB 연결 설정"
+              >
+                <Settings class="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
@@ -258,19 +287,25 @@
                 rows="2"
                 @keydown.ctrl.enter="sendCurrentMessage"
                 @keydown.enter.prevent="sendCurrentMessage"
-                :disabled="loading || chatLoading || isStreaming"
+                :disabled="!isConnected || loading || chatLoading || isStreaming"
               ></textarea>
             </div>
             <button
               @click="sendCurrentMessage"
-              :disabled="!currentMessage.trim() || loading || chatLoading || isStreaming"
+              :disabled="!isConnected || !currentMessage.trim() || loading || chatLoading || isStreaming"
               class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
               <Send class="w-4 h-4" />
             </button>
           </div>
-          <p class="text-xs text-gray-500 mt-2">
-            {{ isStreaming ? '쿼리 처리 중...' : 'Ctrl+Enter 또는 Enter로 전송' }}
+          <p class="text-xs mt-2" :class="isConnected ? 'text-gray-500' : 'text-red-600'">
+            <template v-if="!selectedConnectionId">먼저 DB 연결을 설정하세요.</template>
+            <template v-else-if="selectedConnection?.status === 'error'">
+              연결 오류: {{ selectedConnection.last_error || '연결을 확인하고 설정에서 테스트하세요.' }}
+            </template>
+            <template v-else-if="selectedConnection?.status === 'testing'">연결 테스트 중...</template>
+            <template v-else-if="!selectedConnection?.status">연결 상태를 확인하려면 설정에서 테스트하세요.</template>
+            <template v-else>{{ isStreaming ? '쿼리 처리 중...' : 'Ctrl+Enter 또는 Enter로 전송' }}</template>
           </p>
         </div>
       </div>
@@ -345,6 +380,12 @@
       @cancel="handleStreamingCancel"
       @close="handleStreamingClose"
     />
+
+    <!-- Connection Panel -->
+    <ConnectionPanel
+      :open="isConnPanelOpen"
+      @close="handleConnPanelClose"
+    />
   </div>
 </template>
 
@@ -360,16 +401,19 @@ import {
   Send,
   User,
   Menu,
-  Database
+  Database,
+  Settings
 } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
 import { useApi } from '@/composables/useApi';
 import { useChatSession } from '@/composables/useChatSession';
 import { useStreaming } from '@/composables/useStreaming';
+import { useConnections } from '@/composables/useConnections';
 import ChatMessage from './ChatMessage.vue';
 import UserProfile from './UserProfile.vue';
 import DatabaseInfo from './DatabaseInfo.vue';
 import StreamingProgress from './StreamingProgress.vue';
+import ConnectionPanel from './ConnectionPanel.vue';
 import type { QueryResponse } from '@/types/api';
 
 const router = useRouter();
@@ -387,6 +431,9 @@ const {
   clearCurrentSession
 } = useChatSession();
 
+// Connections composable (DB 선택)
+const { connections, selectedConnectionId, selectedConnection, fetchConnections } = useConnections();
+
 // Raw messages from API
 const rawMessages = ref<any[]>([]);
 
@@ -402,11 +449,26 @@ const {
 
 const activeTab = ref('chat');
 const currentMessage = ref('');
-const isConnected = ref(true);
+const isConnected = computed(() => {
+  // 연결 ID가 있으면 입력 허용 (테스트 목적으로 조건 완화)
+  const hasConnectionId = !!selectedConnectionId.value;
+  const connectionStatus = selectedConnection.value?.status;
+  
+  console.log('isConnected 계산:', {
+    hasConnectionId,
+    connectionStatus,
+    selectedConnectionId: selectedConnectionId.value,
+    selectedConnection: selectedConnection.value
+  });
+  
+  // 일단 연결 ID만 있으면 허용
+  return hasConnectionId;
+});
 const messagesContainer = ref<HTMLElement>();
 const isUserScrolledUp = ref(false);
 const shouldAutoScroll = ref(true);
 const isCollapsed = ref(false);
+const isConnPanelOpen = ref(false);
 
 // UI Message interface for display
 interface UIMessage {
@@ -551,6 +613,17 @@ const confirmDeleteSession = async (sessionId: string) => {
 const sendMessage = async (content: string) => {
   if (!content.trim()) return;
 
+  // 연결 상태 검증
+  if (!selectedConnectionId.value) {
+    alert('먼저 DB 연결을 설정해주세요.');
+    return;
+  }
+
+  if (selectedConnection.value?.status === 'error') {
+    alert(`연결 오류: ${selectedConnection.value.last_error || '연결을 확인해주세요.'}`);
+    return;
+  }
+
   // Ensure session exists
   if (!hasActiveSession.value) {
     console.log('Creating new session...');
@@ -578,6 +651,7 @@ const sendMessage = async (content: string) => {
   await streamQuery(
     content.trim(),
     sessionId,
+    selectedConnectionId.value || undefined,
     // onProgress callback
     (event) => {
       console.log('Streaming event:', event);
@@ -652,6 +726,30 @@ const logout = async () => {
   router.push('/login');
 };
 
+const getConnectionStatusText = () => {
+  if (!selectedConnection.value) return 'DB 연결이 설정되지 않았습니다';
+  
+  switch (selectedConnection.value.status) {
+    case 'connected':
+      return '연결됨';
+    case 'error':
+      return `연결 오류: ${selectedConnection.value.last_error || '알 수 없는 오류'}`;
+    case 'testing':
+      return '연결 테스트 중...';
+    default:
+      return '연결 상태를 확인하려면 설정에서 테스트하세요';
+  }
+};
+
+const handleConnPanelClose = () => {
+  isConnPanelOpen.value = false;
+  console.log('연결 패널 닫힘 후 상태:', {
+    selectedConnectionId: selectedConnectionId.value,
+    selectedConnection: selectedConnection.value,
+    isConnected: isConnected.value
+  });
+};
+
 // Watch computed messages for changes and auto-scroll
 watch(
   () => messages.value.length,
@@ -674,10 +772,13 @@ watch(
 );
 
 onMounted(async () => {
-  // Load user's chat sessions
+  // Load user's chat sessions & connections
   await loadUserSessions();
+  await fetchConnections();
   
-  // Check connection status
-  // TODO: Implement actual connection check
+  console.log('Connections loaded:', connections.value);
+  console.log('Selected connection ID:', selectedConnectionId.value);
+  console.log('Selected connection:', selectedConnection.value);
+  console.log('Is connected:', isConnected.value);
 });
 </script>

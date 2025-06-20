@@ -5,6 +5,7 @@ Schema endpoints for Text-to-SQL application.
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
+from sqlalchemy import MetaData
 import logging
 
 from services.auth_dependencies import get_current_user
@@ -40,14 +41,62 @@ async def get_schema(
     current_user: UserResponse = Depends(get_current_user),
     database: str = "northwind",
     include_sample_data: bool = False,
-    table_filter: Optional[str] = None
+    table_filter: Optional[str] = None,
+    connection_id: Optional[str] = None
 ):
     """Get database schema information."""
     try:
         # Get database manager from app state
         db_manager = request.app.state.db_manager
         
-        # Create schema analyzer tool
+        # If connection_id가 제공되면 해당 연결의 실제 스키마를 조회합니다.
+        if connection_id:
+            user_id = current_user.get("id") if isinstance(current_user, dict) else current_user.id
+
+            # 동적 엔진 생성
+            analysis_engine = await db_manager.get_analysis_db_engine(
+                connection_id=connection_id,
+                user_id=user_id
+            )
+
+            metadata = MetaData()
+            async with analysis_engine.connect() as conn:
+                await conn.run_sync(metadata.reflect)
+
+            tables: List[TableInfo] = []
+            for tbl_name, tbl in metadata.tables.items():
+                # 테이블 필터가 지정된 경우 적용
+                if table_filter:
+                    filters = table_filter.split(",")
+                    if tbl_name not in filters:
+                        continue
+
+                cols = [
+                    {
+                        "column_name": col.name,
+                        "data_type": str(col.type),
+                        "is_nullable": col.nullable,
+                    }
+                    for col in tbl.columns
+                ]
+                tables.append(
+                    TableInfo(
+                        name=tbl_name,
+                        columns=cols,
+                        row_count=None,
+                        sample_data=None,
+                        relationships=None,
+                    )
+                )
+
+            return SchemaResponse(
+                database=f"conn:{connection_id}",
+                tables=tables,
+                total_tables=len(tables),
+                success=True,
+            )
+
+        # ---- 기존 northwind (또는 database 파라미터) 로직 유지 ----
         schema_analyzer = SchemaAnalyzerTool(db_manager)
         
         # Parse table filter if provided

@@ -30,7 +30,7 @@ import uvicorn
 # Ensure models are registered with Base before other components use it
 from models import models
 from core.config import get_settings, validate_settings
-from database.connection_manager import DatabaseManager
+from database import connection_manager as _conn_mod
 
 # Enhanced Core Module imports (개선된 core 모듈) - 안전한 import 처리
 try:
@@ -89,7 +89,8 @@ async def lifespan(app: FastAPI):
         settings = get_settings()
         app.state.settings = settings
         
-        db_manager = DatabaseManager()
+        # Use a single shared DatabaseManager instance across the app
+        db_manager = _conn_mod.db_manager  # module-level singleton
         await db_manager.initialize()
         app.state.db_manager = db_manager
         logger.info("✅ 데이터베이스 매니저 초기화 완료")
@@ -149,7 +150,7 @@ async def lifespan(app: FastAPI):
                     # 동기 실행 테스트
                     test_result = enhanced_sql_agent.execute_query_sync("고객 수를 알려주세요")
                     if test_result.get("success"):
-                        logger.info(f"� Enhanced SQL Agent 테스트 성공 - 결과: {len(test_result.get('results', []))}행")
+                        logger.info(f"🔄 Enhanced SQL Agent 테스트 성공 - 결과: {len(test_result.get('results', []))}행")
                     else:
                         logger.warning(f"⚠️ Enhanced SQL Agent 테스트 실패: {test_result.get('error', 'Unknown error')}")
                         
