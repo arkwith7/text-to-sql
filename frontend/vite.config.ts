@@ -5,12 +5,13 @@ import path from 'path'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   
-  // 개발환경에서는 IPv6 문제를 방지하기 위해 127.0.0.1 사용
-  const apiTarget = mode === 'development' 
-    ? 'http://127.0.0.1:8000' 
-    : env.VITE_API_BASE_URL || 'http://localhost:8000';
+  // 환경 변수 우선순위: process.env > .env 파일
+  const apiTarget = process.env.VITE_API_BASE_URL || env.VITE_API_BASE_URL || 
+    (mode === 'development' ? 'http://127.0.0.1:8000' : '/api');
     
   console.log(`🔧 Vite Config - Mode: ${mode}, API Target: ${apiTarget}`);
+  console.log(`🔧 Process ENV: ${process.env.VITE_API_BASE_URL}`);
+  console.log(`🔧 Loaded ENV: ${env.VITE_API_BASE_URL}`);
   
   return {
     plugins: [vue()],

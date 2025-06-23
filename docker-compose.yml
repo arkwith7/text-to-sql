@@ -39,25 +39,21 @@ services:
       - backend-data:/app/data
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
-  # Frontend (Vue.js)
+  # Frontend (Vue.js) - Production Build
   frontend:
     build: 
       context: ./frontend
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_API_BASE_URL: "/api"
     container_name: text-to-sql-frontend
     ports:
-      - "8080:3000"  # 외부:8080 -> 내부:3000
+      - "8080:80"  # 외부:8080 -> 내부:80 (nginx)
     environment:
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
       - NODE_ENV=production
     depends_on:
       - backend
     networks:
       - text-to-sql-network
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
 
 networks:
   text-to-sql-network:
