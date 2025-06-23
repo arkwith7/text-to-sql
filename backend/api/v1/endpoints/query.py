@@ -12,6 +12,7 @@ import uuid
 from services.auth_dependencies import get_current_user
 from services.auth_service import UserResponse
 from core.agents.sql_agent import SQLAgent
+from database.connection_manager import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,10 @@ class QueryRequest(BaseModel):
         example="가장 많이 팔린 제품 5개는?",
         min_length=1,
         max_length=500
+    )
+    connection_id: str = Field(
+        ...,
+        description="분석할 데이터베이스 연결 ID"
     )
     database: str = Field(
         default="northwind", 
@@ -217,194 +222,59 @@ async def execute_query(
     - 쿼리 설명 (요청 시)
     - 실행 시간 및 통계
     """
-    sql_agent: SQLAgent = request.app.state.sql_agent
-    
     try:
-        # Execute the query using the agent
+        # Get the correct database engine for analysis
+        db_manager: DatabaseManager = request.app.state.db_manager
+        user_id = current_user.get("id")
+        analysis_engine = await db_manager.get_analysis_db_engine(
+            connection_id=query_request.connection_id,
+            user_id=user_id
+        )
+
+        # Initialize the agent and execute the query on the dynamic engine
+        sql_agent = SQLAgent()
         result = await sql_agent.execute_query(
             question=query_request.question,
-            database=query_request.database,
+            engine=analysis_engine,
             context=query_request.context,
-            user_id=current_user.get("id"),
+            user_id=user_id,
             include_explanation=query_request.include_explanation,
-            include_debug_info=True,  # 중간 단계 정보 포함
             max_rows=query_request.max_rows
         )
         
-        # 디버그: LangChain Agent 응답 구조 확인
-        logger.info(f"🔍 LangChain Agent 응답 키: {list(result.keys())}")
-        if "debug_info" in result:
-            debug_info = result["debug_info"]
-            logger.info(f"🔍 Debug info 키: {list(debug_info.keys())}")
-            if "intermediate_steps" in debug_info:
-                steps = debug_info["intermediate_steps"]
-                logger.info(f"🔍 Intermediate steps 수: {len(steps)}")
-                for i, step in enumerate(steps):
-                    logger.info(f"🔍 Step {i}: {type(step)}")
-                    if isinstance(step, tuple) and len(step) >= 2:
-                        action, observation = step[0], step[1]
-                        logger.info(f"🔍 Action: {type(action)} - {action}")
-                        logger.info(f"🔍 Observation (first 200 chars): {str(observation)[:200]}...")
-                        
-                        # 더 세부적인 action 정보
-                        if hasattr(action, 'tool'):
-                            logger.info(f"🔧 Tool name: {action.tool}")
-                        if hasattr(action, 'tool_input'):
-                            logger.info(f"🔧 Tool input: {action.tool_input}")
-                    else:
-                        logger.info(f"🔍 Full step: {step}")
-        
-        # LangChain Agent 응답을 SQL Agent 형식으로 변환
-        if "answer" in result and "sql_query" not in result:
-            # LangChain Agent 응답 변환
-            sql_query = ""
-            results = []
-            
-            # debug_info에서 intermediate_steps 확인
-            debug_info = result.get("debug_info", {})
-            intermediate_steps = debug_info.get("intermediate_steps", [])
-            
-            # intermediate_steps에서 SQL과 결과 추출
-            for step in intermediate_steps:
-                if isinstance(step, tuple) and len(step) >= 2:
-                    action, observation = step[0], step[1]
-                    
-                    # 도구 이름 확인
-                    tool_name = ""
-                    if hasattr(action, 'tool'):
-                        tool_name = str(action.tool)
-                    
-                    logger.info(f"🛠️ Processing tool: {tool_name}")
-                    
-                    # SQL 생성 도구 결과 처리
-                    if 'generate_sql_from_question' in tool_name:
-                        try:
-                            import json
-                            if isinstance(observation, str):
-                                sql_data = json.loads(observation)
-                                if "sql_query" in sql_data:
-                                    sql_query = sql_data["sql_query"]
-                                    logger.info(f"✅ SQL 추출 성공: {sql_query}")
-                        except Exception as e:
-                            logger.error(f"❌ SQL 추출 실패: {e}")
-                    
-                    # SQL 실행 도구 결과 처리
-                    elif 'execute_sql_query' in tool_name:
-                        try:
-                            import json
-                            if isinstance(observation, str):
-                                exec_data = json.loads(observation)
-                                if "results" in exec_data and exec_data.get("success"):
-                                    results = exec_data["results"]
-                                    logger.info(f"✅ 결과 추출 성공: {len(results)}행")
-                            elif isinstance(observation, list):
-                                results = observation
-                                logger.info(f"✅ 직접 결과 추출: {len(results)}행")
-                        except Exception as e:
-                            logger.error(f"❌ 결과 추출 실패: {e}")
-                            # 텍스트 결과를 dict로 변환
-                            if isinstance(observation, str) and observation.strip():
-                                results = [{"result": observation}]
-                                logger.info(f"📝 텍스트 결과 변환: {len(results)}행")
-            
-            # Agent의 답변에서 SQL 추출 (fallback)
-            answer = result.get("answer", "")
-            if not sql_query and "```sql" in answer:
-                try:
-                    sql_start = answer.find("```sql") + 6
-                    sql_end = answer.find("```", sql_start)
-                    if sql_end > sql_start:
-                        sql_query = answer[sql_start:sql_end].strip()
-                except:
-                    pass
-            
-            # 결과 변환
-            result = {
-                "success": result.get("success", True),
-                "question": query_request.question,
-                "sql_query": sql_query,
-                "results": results,
-                "answer": answer,  # 원본 답변 유지
-                "explanation": answer if query_request.include_explanation else None,
-                "execution_time": result.get("execution_time", 0),
-                "agent_type": result.get("agent_type", "langchain"),
-                "model": result.get("model", "unknown")
-            }
-        
-        # 토큰 사용량 정보 처리
         token_usage_response = None
-        if "token_usage" in result and result["token_usage"]:
+        if result.get("token_usage"):
             token_usage = result["token_usage"]
             token_usage_response = TokenUsage(
                 prompt_tokens=token_usage.get("prompt_tokens", 0),
                 completion_tokens=token_usage.get("completion_tokens", 0),
                 total_tokens=token_usage.get("total_tokens", 0)
             )
-            
-            # Analytics service를 통해 쿼리 실행 기록
-            if hasattr(request.app.state, 'analytics_service'):
-                analytics_service = request.app.state.analytics_service
-                await analytics_service.log_query_execution_with_tokens(
-                    query_id=str(uuid.uuid4()),
-                    user_id=current_user.get("id"),
-                    question=query_request.question,
-                    sql_query=result.get("sql_query", ""),
-                    execution_time=result["execution_time"],
-                    row_count=len(result.get("results", [])),
-                    success=True,
-                    error_message=None,
-                    chart_type=None,
-                    prompt_tokens=token_usage.get("prompt_tokens", 0),
-                    completion_tokens=token_usage.get("completion_tokens", 0),
-                    total_tokens=token_usage.get("total_tokens", 0),
-                    llm_model=result.get("model", "gpt-4o-mini")
-                )
-        
+
         return QueryResponse(
             question=query_request.question,
             sql_query=result["sql_query"],
             results=result["results"],
             explanation=result.get("explanation"),
             execution_time=result["execution_time"],
-            row_count=len(result["results"]),
-            database=query_request.database,
-            success=True,
+            row_count=result["row_count"],
+            database=query_request.database, # Keep for now, might be connection name in future
+            success=result["success"],
+            error_message=result.get("error_message"),
             token_usage=token_usage_response
         )
         
     except Exception as e:
-        logger.error(f"Query execution failed: {str(e)}")
-        
-        # 실패한 쿼리도 analytics에 기록 (토큰 사용량은 0으로)
-        if hasattr(request.app.state, 'analytics_service'):
-            analytics_service = request.app.state.analytics_service
-            
-            await analytics_service.log_query_execution_with_tokens(
-                query_id=str(uuid.uuid4()),
-                user_id=current_user.get("id"),
-                question=query_request.question,
-                sql_query="",
-                execution_time=0.0,
-                row_count=0,
-                success=False,
-                error_message=str(e),
-                chart_type=None,
-                prompt_tokens=0,
-                completion_tokens=0,
-                total_tokens=0,
-                llm_model="gpt-4o-mini"
-            )
-        
-        return QueryResponse(
-            question=query_request.question,
-            sql_query="",
-            results=[],
-            execution_time=0.0,
-            row_count=0,
-            database=query_request.database,
-            success=False,
-            error_message=str(e),
-            token_usage=None
+        logger.error(f"Query execution failed: {str(e)}", exc_info=True)
+        # In a real app, you might want more specific error handling
+        if isinstance(e, (ValueError, NotImplementedError)):
+             error_status = status.HTTP_400_BAD_REQUEST
+        else:
+             error_status = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+        raise HTTPException(
+            status_code=error_status,
+            detail=str(e)
         )
 
 @router.post("/validate", response_model=QueryValidationResponse)

@@ -98,7 +98,7 @@ class OpenAIProvider(BaseLLMProvider):
         
         try:
             response = await self.client.chat.completions.create(
-                model=self.config.get("model", "gpt-4"),
+                model=self.config.get("model", "gpt-4o-mini"),
                 messages=messages,
                 max_tokens=max_tokens or 1000,
                 temperature=temperature or 0.1,

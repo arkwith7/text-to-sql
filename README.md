@@ -15,8 +15,9 @@ AI-powered natural language to SQL converter with real-time data visualization.
 ## 🏗️ Architecture
 
 - **Frontend**: Vue 3 + TypeScript + Tailwind CSS
-- **Backend**: Python FastAPI
+- **Backend**: Python FastAPI + LangChain
 - **Database**: PostgreSQL with Northwind data
+- **Cache**: Redis
 - **AI**: Azure OpenAI GPT-4o-mini
 - **Deployment**: Docker containers
 
@@ -29,37 +30,49 @@ AI-powered natural language to SQL converter with real-time data visualization.
 
 ## 🚀 Quick Start
 
-### 1. Clone and Setup
+### 1. Clone the Repository
 
 ```bash
-cd /home/wjadmin/Dev/text-to-sql
+git clone https://github.com/your-username/text-to-sql.git
+cd text-to-sql
 ```
 
 ### 2. Configure Environment
 
-Create a `.env` file and add your Azure OpenAI credentials:
+This project uses a `.env` file for configuration. A startup script will help you create one.
+
+1.  An example file `.env.example` is provided. If you don't have a `.env` file, the startup script will copy `.env.example` to `.env`.
+2.  Open the `.env` file and fill in your Azure OpenAI credentials.
+
 ```env
+# .env
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
 AZURE_OPENAI_API_KEY=your-api-key-here
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o-mini
+
+# Database and Cache
+DATABASE_URL=postgresql://postgres:password@localhost:5432/northwind
+REDIS_URL=redis://localhost:6379
 ```
 
 ### 3. Start the Application
 
+This single command starts the entire stack, including PostgreSQL, Redis, backend, and frontend.
+
 ```bash
-# This script intelligently handles all PostgreSQL scenarios
-./start-existing-db.sh
+# This script intelligently handles all service scenarios
+./start-app.sh
 ```
 
 ### 4. Access the Application
 
-- **Landing Page**: http://localhost:3001 (비즈니스 가치 및 제품 소개)
-- **Application**: http://localhost:3001/home (로그인 후 메인 애플리케이션)
+- **Application**: http://localhost:3000 (Login and main application)
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
+- **Landing Page**: The main application includes the landing page elements.
 
-> **참고**: 랜딩 페이지(`/`)는 인증 없이 접근 가능하며, 메인 애플리케이션은 로그인이 필요합니다.
+> **Note**: The main application at `/` requires login.
 
 ## 🎯 Sample Questions
 
@@ -80,8 +93,8 @@ For active development with hot-reloading:
 
 **1. Backend (Terminal 1)**
 ```bash
-# 스마트 Northwind DB 체크 및 자동 초기화 포함
-./dev-backend.sh
+# This script sets up the backend dev environment
+./backend/dev-backend.sh
 ```
 
 **2. Frontend (Terminal 2)**
@@ -205,7 +218,8 @@ The application uses the **Northwind** database with these main tables:
 | `AZURE_OPENAI_API_KEY`         | Azure OpenAI API key          | Required                |
 | `AZURE_OPENAI_API_VERSION`     | API version                   | `2024-02-15-preview`    |
 | `AZURE_OPENAI_DEPLOYMENT_NAME` | Model deployment name         | `gpt-4o-mini`           |
-| `DATABASE_URL`                 | PostgreSQL connection string  | Auto-configured         |
+| `DATABASE_URL`                 | PostgreSQL connection string  | Required                |
+| `REDIS_URL`                    | Redis connection string       | Required                |
 | `VITE_API_BASE_URL`            | Backend API URL for frontend  | `http://localhost:8000` |
 
 ## 📁 Project Structure
@@ -213,36 +227,40 @@ The application uses the **Northwind** database with these main tables:
 ```
 text-to-sql/
 ├── README.md                 # This file
-├── docker-compose.yml        # Container orchestration
-├── .gitignore              # Git ignore rules
+├── docker-compose.yml        # Docker services for backend and frontend
+├── start-app.sh              # Main startup script for the entire application
+├── db-helper.sh              # Helper script for managing PostgreSQL container
 │
-├── 🚀 Startup Scripts
-├── start-existing-db.sh     # Smart PostgreSQL handling (Recommended)
-├── dev-backend.sh           # Backend development server
-├── db-helper.sh           # Database management helper
+├── backend/                  # FastAPI Backend
+│   ├── alembic/              # Database migrations
+│   ├── api/                  # API endpoints (v1)
+│   ├── core/                 # Core logic (LLM providers, agents, tools)
+│   ├── database/             # Database connection management
+│   ├── models/               # SQLAlchemy models
+│   ├── services/             # Business logic services
+│   ├── tests/                # Backend tests
+│   ├── .env.example          # Example environment variables
+│   ├── dev-backend.sh        # Development server script for backend
+│   ├── main.py               # FastAPI application entry point
+│   └── requirements.txt      # Python dependencies
 │
-├── 🔧 Backend (FastAPI)
-├── backend/
-│   ├── alembic/           # Database migrations
-│   ├── main.py            # Main API application
-│   ├── models.py          # Database models
-│   ├── services.py        # Business logic
-│   └── requirements.txt
-│
-├── 🎨 Frontend (Vue.js)
-├── frontend/
+├── frontend/                 # Vue.js Frontend
+│   ├── public/
+│   ├── src/                  # Source code
+│   │   ├── assets/
+│   │   ├── components/       # Vue components
+│   │   ├── composables/      # Vue composables (hooks)
+│   │   ├── router/           # Vue router
+│   │   ├── views/            # Page components
+│   │   └── main.ts           # Entry point
+│   ├── Dockerfile
+│   ├── index.html
 │   ├── package.json
-│   ├── vite.config.ts
-│   ├── tailwind.config.js
-│   └── src/
-│       ├── main.ts        # Entry point
-│       ├── App.vue        # Root component
-│       └── ...
+│   └── vite.config.ts
 │
-└── 🗄️ Database
-    └── postgre/
-        ├── northwind.sql     # Northwind database schema + data
-        └── setup-northwind.sh
+└── postgre/                  # PostgreSQL related files
+    ├── northwind.sql         # Northwind database schema and data
+    └── setup-northwind.sh    # (Deprecated) Old setup script
 ```
 
 ## 🐛 Troubleshooting
@@ -272,7 +290,7 @@ The smart scripts automatically handle most PostgreSQL scenarios, but here are m
 
    ```bash
    docker-compose down
-   ./start-existing-db.sh
+   ./start-app.sh
    ```
 2. **Northwind 데이터베이스 수동 초기화**
 
@@ -365,7 +383,7 @@ docker exec -it northwind-postgres psql -U postgres -d northwind
 
 ### For Developers
 
-- Use `./start-existing-db.sh` for development - it's the smartest option
+- Use `./start-app.sh` for development - it's the smartest option
 - Use `./db-helper.sh status` to quickly check database state
 - Backend logs: `docker-compose logs -f backend`
 - Frontend logs: `docker-compose logs -f frontend`

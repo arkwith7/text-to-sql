@@ -4,20 +4,20 @@ Handles both application database (SQLite) and business data sources (PostgreSQL
 """
 from sqlalchemy import text, MetaData
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
 from contextlib import asynccontextmanager
-from typing import Dict, Any, Optional, Generator, List
+from typing import Dict, Any, Optional, Generator, List, AsyncGenerator
 import structlog
 import time
 from datetime import datetime
 from functools import lru_cache
 from core.config import get_settings
+from .base import Base
+# ConnectionService is now imported locally to prevent circular imports
 
 logger = structlog.get_logger(__name__)
 
-# SQLAlchemy base for ORM models
-Base = declarative_base()
-
+# SQLAlchemy base for ORM models is now in database/base.py
 
 class DatabaseManager:
     """Enhanced Database Manager with performance monitoring and caching capabilities"""
@@ -249,17 +249,22 @@ class DatabaseManager:
             engine = self.get_engine(db_name)
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
-            logger.info(f"Connection test successful for {db_name}")
+            # northwind 관련 로그만 제거, 다른 DB는 유지
+            if db_name != 'northwind':
+                logger.info(f"Connection test successful for {db_name}")
             return True
         except Exception as e:
-            logger.error(f"Connection test failed for {db_name}", error=str(e))
+            if db_name != 'northwind':
+                logger.error(f"Connection test failed for {db_name}", error=str(e))
             return False
     
     async def close_all_connections(self):
         """Dispose all engine connections."""
         for name, engine in self.engines.items():
             await engine.dispose()
-            logger.info(f"Closed connections for {name} database")
+            # northwind 관련 로그만 제거, 다른 DB는 유지
+            if name != 'northwind':
+                logger.info(f"Closed connections for {name} database")
 
     # === 노트북의 EnhancedDatabaseManager 성능 모니터링 기능 ===
     
@@ -345,6 +350,40 @@ class DatabaseManager:
         else:
             self.performance_stats['errors'] += 1
             logger.error(f"❌ 쿼리 실행 실패: {query_entry['id']} - {error}")
+
+    async def get_analysis_db_engine(self, connection_id: str, user_id: str):
+        """
+        Dynamically creates an SQLAlchemy engine for a user-defined analysis database.
+        """
+        from services.connection_service import ConnectionService
+
+        # The app DB session is needed to fetch the connection details
+        async with self.get_session('app') as session:
+            service = ConnectionService(session)
+            conn_details = await service.get_connection(user_id=user_id, connection_id=connection_id)
+
+        if not conn_details:
+            raise ValueError("Database connection not found or access denied.")
+
+        db_type = conn_details['db_type']
+        db_user = conn_details['db_user']
+        db_password = conn_details.get('db_password', '')
+        db_host = conn_details['db_host']
+        db_port = conn_details['db_port']
+        db_name = conn_details['db_name']
+        connection_name = conn_details['connection_name']
+
+        if db_type != 'postgresql':
+            raise NotImplementedError(f"Database type '{db_type}' is not yet supported.")
+        
+        # 분석 대상 데이터베이스 연결 정보 로깅 (비밀번호 제외)
+        connection_info = f"{connection_name} ({db_type}://{db_user}@{db_host}:{db_port}/{db_name})"
+        print(f"🔗 분석 대상 데이터베이스 엔진 생성: {connection_info}")
+        
+        analysis_db_url = f"postgresql+asyncpg://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        
+        # TODO: Cache the created engine based on connection_id
+        return create_async_engine(analysis_db_url, pool_pre_ping=True)
 
 
 # Global database manager instance

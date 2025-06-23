@@ -7,12 +7,11 @@ export function useApi() {
   const loading = ref(false);
   const error = ref<string | null>(null);
 
-  const executeQuery = async (question: string): Promise<QueryResponse | null> => {
+  const executeQuery = async (question: string, connectionId: string): Promise<QueryResponse | null> => {
     loading.value = true;
     error.value = null;
-
     try {
-      const request: QueryRequest = { question };
+      const request: QueryRequest = { question, connection_id: connectionId };
       const response = await api.post<QueryResponse>('/api/v1/query', request);
       return response.data;
     } catch (err: any) {
@@ -24,12 +23,12 @@ export function useApi() {
     }
   };
 
-  const getSchema = async (): Promise<SchemaInfo | null> => {
+  const getSchema = async (connectionId: string): Promise<SchemaInfo | null> => {
     loading.value = true;
     error.value = null;
-
     try {
-      const response = await api.get<SchemaInfo>('/api/v1/schema');
+      // Pass connection_id as a query parameter
+      const response = await api.get<SchemaInfo>(`/api/v1/schema?connection_id=${connectionId}`);
       return response.data;
     } catch (err: any) {
       error.value = err.response?.data?.detail || 'Failed to fetch schema';
@@ -40,41 +39,27 @@ export function useApi() {
     }
   };
 
-  const healthCheck = async (): Promise<boolean> => {
-    try {
-      await api.get('/api/v1/health');
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  const healthCheck = () => api.get('/health');
 
-  // Chat-integrated query execution
-  const executeQueryWithChat = async (
-    question: string, 
-    sessionId?: string
-  ): Promise<{ queryResponse: QueryResponse | null; sessionId: string | null }> => {
-    // First execute the regular query
-    const queryResponse = await executeQuery(question);
-    
-    if (!queryResponse) {
-      return { queryResponse: null, sessionId: null };
-    }
-
-    // If we have a successful query response, we can integrate with chat
-    // This would be used by chat components to save the query result
-    return { 
-      queryResponse, 
-      sessionId: sessionId || null 
-    };
-  };
+  // Database Connection Management
+  const getConnections = () => api.get<any[]>('/api/v1/connections');
+  const createConnection = (data: any) => api.post<any>('/api/v1/connections', data);
+  const updateConnection = (id: string, data: any) => api.put<any>(`/api/v1/connections/${id}`, data);
+  const deleteConnection = (id: string) => api.delete<void>(`/api/v1/connections/${id}`);
+  const testConnection = (id: string) => api.post<any>(`/api/v1/connections/${id}/test`);
 
   return {
     loading,
     error,
     executeQuery,
-    executeQueryWithChat,
     getSchema,
     healthCheck,
+
+    // Connections
+    getConnections,
+    createConnection,
+    updateConnection,
+    deleteConnection,
+    testConnection
   };
 }

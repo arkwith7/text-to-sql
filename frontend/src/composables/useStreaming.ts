@@ -58,6 +58,7 @@ export function useStreaming() {
   const streamQuery = async (
     question: string,
     sessionId?: string,
+    connectionId?: string,
     onProgress?: (event: StreamEvent) => void,
     onComplete?: (result: any) => void,
     onError?: (error: string) => void
@@ -99,8 +100,9 @@ export function useStreaming() {
       // Use the existing query endpoint
       const response = await api.post(`/api/v1/chat/sessions/${sessionId}/query`, {
         question,
+        connection_id: connectionId,
         include_explanation: true,
-        max_rows: 100
+        max_rows: 100,
       });
 
       simulateEvent('executing_query', { message: '쿼리를 실행하고 있습니다...' });

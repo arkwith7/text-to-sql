@@ -2,36 +2,273 @@
   <div class="space-y-6">
     <!-- Database Overview -->
     <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
-      <div class="flex items-center mb-4">
-        <div class="w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center mr-4">
-          <Database class="w-6 h-6 text-white" />
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center">
+          <div class="w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center mr-4">
+            <Database class="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h2 class="text-2xl font-bold text-gray-900">
+              {{ currentConnection?.connection_name || '연결된 데이터베이스 없음' }}
+            </h2>
+            <p class="text-gray-600">
+              {{ currentConnection ? `${currentConnection.db_type?.toUpperCase() || 'PostgreSQL'} 분석 대상 데이터베이스` : '데이터베이스 연결이 필요합니다' }}
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 class="text-2xl font-bold text-gray-900">Northwind 데이터베이스</h2>
-          <p class="text-gray-600">Microsoft 샘플 무역회사 비즈니스 데이터</p>
+        <div class="flex space-x-2">
+          <button 
+            @click="refreshSchema" 
+            :disabled="refreshing || !currentConnection"
+            class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {{ refreshing ? '새로고침 중...' : '새로고침' }}
+          </button>
         </div>
       </div>
       
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="bg-white bg-opacity-70 rounded-lg p-4 text-center">
-          <div class="text-2xl font-bold text-blue-600">8</div>
+          <div class="text-2xl font-bold text-blue-600">{{ schemaInfo?.table_count || '-' }}</div>
           <div class="text-sm text-gray-600">테이블 수</div>
         </div>
         <div class="bg-white bg-opacity-70 rounded-lg p-4 text-center">
-          <div class="text-2xl font-bold text-green-600">900+</div>
-          <div class="text-sm text-gray-600">총 레코드</div>
+          <div class="text-2xl font-bold text-green-600">{{ schemaInfo?.total_columns || '-' }}</div>
+          <div class="text-sm text-gray-600">총 컬럼 수</div>
         </div>
         <div class="bg-white bg-opacity-70 rounded-lg p-4 text-center">
-          <div class="text-2xl font-bold text-purple-600">21</div>
-          <div class="text-sm text-gray-600">국가</div>
+          <div class="text-2xl font-bold text-purple-600">
+            {{ schemaInfo?.last_updated ? formatDate(schemaInfo.last_updated) : '-' }}
+          </div>
+          <div class="text-sm text-gray-600">마지막 업데이트</div>
         </div>
       </div>
     </div>
 
-    <!-- Tables Information -->
-    <div class="grid grid-cols-1 gap-6">
+    <!-- Raw AI Documentation (for debugging) -->
+    <div v-if="schemaInfo?.documentation && aiTables.length === 0" class="bg-white rounded-xl shadow-sm border border-yellow-200 overflow-hidden mb-6">
+      <div class="px-6 py-4 bg-yellow-50 border-b border-yellow-200 flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+          <FileText class="w-5 h-5 mr-2" />
+          📋 원본 AI 문서 (파싱 실패시 표시)
+        </h3>
+        <button @click="documentationExpanded = !documentationExpanded" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <ChevronDown class="w-5 h-5 transition-transform duration-200" :class="{ 'transform rotate-180': documentationExpanded }" />
+        </button>
+      </div>
+      <div v-if="documentationExpanded" class="p-6">
+        <div class="prose prose-sm max-w-none" v-html="formatDocumentation(schemaInfo.documentation)"></div>
+      </div>
+    </div>
+
+    <!-- AI Enhanced Tables Information -->
+    <div v-if="aiTables.length > 0" class="grid grid-cols-1 gap-6">
       <div
-        v-for="table in tableInfo"
+        v-for="table in aiTables"
+        :key="table.name"
+        class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
+      >
+        <!-- Table Header -->
+        <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center">
+              <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
+                <Table class="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900">
+                  {{ table.displayName || `${table.koreanName} (${table.name})` }}
+                </h3>
+                <p class="text-sm text-gray-600">{{ table.description }}</p>
+                <div class="flex flex-wrap gap-1 mt-1">
+                  <span 
+                    v-for="keyword in (table.keywords || []).slice(0, 3)" 
+                    :key="keyword"
+                    class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full"
+                  >
+                    {{ keyword }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button
+              @click="toggleTable(table.name)"
+              class="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <ChevronDown 
+                class="w-5 h-5 transition-transform duration-200"
+                :class="{ 'transform rotate-180': expandedTables.includes(table.name) }"
+              />
+            </button>
+          </div>
+        </div>
+
+        <!-- Table Content (Expandable) -->
+        <div v-if="expandedTables.includes(table.name)" class="p-6">
+          <!-- Schema Information with Korean Names -->
+          <div class="mb-6">
+            <h4 class="text-md font-medium text-gray-900 mb-3 flex items-center">
+              <Table class="w-4 h-4 mr-2" />
+              컬럼 정보 (한국어 매핑)
+            </h4>
+            <div class="bg-gray-50 rounded-lg p-4">
+              <div class="grid gap-3">
+                <div
+                  v-for="column in table.columns"
+                  :key="column.name"
+                  class="bg-white rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition-colors"
+                >
+                  <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                      <div class="flex items-center mb-2">
+                        <span class="font-mono text-sm text-blue-600 mr-3">{{ column.name }}</span>
+                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">{{ column.type }}</span>
+                      </div>
+                      <div class="text-sm font-medium text-gray-900 mb-1">
+                        🏷️ {{ column.koreanName || column.name }}
+                      </div>
+                      <div class="text-xs text-gray-600 mb-2">{{ column.description }}</div>
+                      <div class="flex flex-wrap gap-1">
+                        <span 
+                          v-for="keyword in (column.keywords || [])" 
+                          :key="keyword"
+                          class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded"
+                        >
+                          {{ keyword }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SQL Mapping Examples -->
+          <div class="mb-6" v-if="table.sqlMappings && table.sqlMappings.length > 0">
+            <h4 class="text-md font-medium text-gray-900 mb-3 flex items-center">
+              <MessageSquare class="w-4 h-4 mr-2" />
+              SQL 질문 매핑
+            </h4>
+            <div class="space-y-3">
+              <div
+                v-for="mapping in table.sqlMappings"
+                :key="mapping.koreanQuestion"
+                class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200"
+              >
+                <div class="flex items-start space-x-3">
+                  <div class="flex-shrink-0 mt-1">
+                    <div class="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                      <span class="text-white text-xs font-bold">Q</span>
+                    </div>
+                  </div>
+                  <div class="flex-1">
+                    <p class="font-medium text-gray-900 mb-1">{{ mapping.koreanQuestion }}</p>
+                    <div class="text-xs bg-gray-800 text-green-400 px-3 py-2 rounded font-mono overflow-x-auto">
+                      {{ mapping.sqlHint }}
+                    </div>
+                  </div>
+                  <button
+                    @click="copyToClipboard(mapping.koreanQuestion)"
+                    class="flex-shrink-0 text-gray-400 hover:text-green-600 transition-colors"
+                    title="질문 복사"
+                  >
+                    <Copy class="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Analysis Examples -->
+          <div v-if="table.examples && table.examples.length > 0">
+            <h4 class="text-md font-medium text-gray-900 mb-3 flex items-center">
+              <Lightbulb class="w-4 h-4 mr-2" />
+              분석 예시
+            </h4>
+            <div class="space-y-2">
+              <div
+                v-for="example in table.examples"
+                :key="example.question"
+                class="bg-blue-50 rounded-lg p-3 border border-blue-200"
+              >
+                <p class="font-medium text-gray-900 text-sm">{{ example.question }}</p>
+                <p class="text-xs text-gray-600 mt-1">{{ example.purpose }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table Relations -->
+          <div v-if="table.relation && table.relation !== '자동 분석 불가'" class="mt-6">
+            <h4 class="text-md font-medium text-gray-900 mb-3 flex items-center">
+              <Database class="w-4 h-4 mr-2" />
+              테이블 관계
+            </h4>
+            <div class="bg-purple-50 rounded-lg p-3 border border-purple-200">
+              <p class="text-sm text-gray-700">{{ table.relation }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dynamic Tables Information (Fallback for non-AI docs) -->
+    <div v-else-if="schemaInfo?.tables" class="grid grid-cols-1 gap-6">
+      <div
+        v-for="table in schemaInfo.tables"
+        :key="table.table_name"
+        class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
+      >
+        <!-- Table Header -->
+        <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center">
+              <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+                <Table class="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900">{{ table.table_name }}</h3>
+                <p class="text-sm text-gray-600">{{ table.column_count }}개 컬럼</p>
+              </div>
+            </div>
+            <button
+              @click="toggleTable(table.table_name)"
+              class="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <ChevronDown 
+                class="w-5 h-5 transition-transform duration-200"
+                :class="{ 'transform rotate-180': expandedTables.includes(table.table_name) }"
+              />
+            </button>
+          </div>
+        </div>
+
+        <!-- Table Content (Expandable) -->
+        <div v-if="expandedTables.includes(table.table_name)" class="p-6">
+          <div class="bg-gray-50 rounded-lg p-4">
+            <div class="grid gap-2">
+              <div
+                v-for="column in table.columns"
+                :key="column.column_name"
+                class="flex items-center justify-between py-2 px-3 bg-white rounded border"
+              >
+                <div class="flex items-center">
+                  <span class="font-mono text-sm text-blue-600 mr-3">{{ column.column_name }}</span>
+                  <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">{{ column.data_type }}</span>
+                  <span v-if="!column.is_nullable" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded ml-2">NOT NULL</span>
+                </div>
+                <span v-if="column.column_default" class="text-xs text-gray-500">기본값: {{ column.column_default }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fallback: Static Tables Information -->
+    <div v-else class="grid grid-cols-1 gap-6">
+      <div
+        v-for="table in fallbackTableInfo"
         :key="table.name"
         class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
       >
@@ -167,7 +404,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { 
   Database, 
   Table, 
@@ -185,10 +422,121 @@ import {
   Building,
   ClipboardList
 } from 'lucide-vue-next';
+import { useConnections } from '@/composables/useConnections';
+import { useAuth } from '@/composables/useAuth';
 
+// Composables
+const { connections, selectedConnectionId, selectedConnection } = useConnections();
+const { api } = useAuth();
+
+// State
 const expandedTables = ref<string[]>(['customers', 'products']); // 기본으로 고객과 제품 테이블 확장
+const schemaInfo = ref<any>(null);
+const refreshing = ref(false);
+const documentationExpanded = ref(true);
 
-const tableInfo = [
+// Computed
+const currentConnection = computed(() => {
+  return connections.value.find(conn => conn.id === selectedConnectionId.value);
+});
+
+// 날짜 포맷팅 함수
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('ko-KR', { 
+    month: 'short', 
+    day: 'numeric'
+  });
+};
+
+// 스키마 정보 새로고침
+const refreshSchema = async () => {
+  if (!selectedConnectionId.value) return;
+  
+  refreshing.value = true;
+  try {
+    const response = await api.get(`/api/v1/schema/${selectedConnectionId.value}?force_refresh=true`);
+    if (response.data.success) {
+      schemaInfo.value = response.data.data;
+      console.log('스키마 정보 새로고침 완료:', response.data.data);
+    }
+  } catch (error) {
+    console.error('스키마 새로고침 실패:', error);
+  } finally {
+    refreshing.value = false;
+  }
+};
+
+// 스키마 정보 로드
+const loadSchemaInfo = async () => {
+  if (!selectedConnectionId.value) return;
+  
+  try {
+    const response = await api.get(`/api/v1/schema/${selectedConnectionId.value}`);
+    if (response.data.success) {
+      schemaInfo.value = response.data.data;
+      console.log('스키마 정보 로드 완료:', response.data.data);
+    }
+  } catch (error) {
+    console.error('스키마 정보 로드 실패:', error);
+  }
+};
+
+// 연결 변경 감지
+watch(selectedConnectionId, (newConnectionId) => {
+  if (newConnectionId) {
+    schemaInfo.value = null; // 기존 스키마 정보 초기화
+    loadSchemaInfo();
+  } else {
+    schemaInfo.value = null;
+  }
+});
+
+// AI 문서에서 JSON 블록들을 파싱하는 함수
+const parseAIDocumentation = (documentation: string) => {
+  const jsonBlocks = [];
+  const regex = /```jsonc\n([\s\S]*?)\n```/g;
+  let match;
+  
+  while ((match = regex.exec(documentation)) !== null) {
+    try {
+      const jsonString = match[1];
+      const jsonData = JSON.parse(jsonString);
+      jsonBlocks.push(jsonData);
+    } catch (e) {
+      console.warn('JSON 파싱 실패:', e);
+    }
+  }
+  
+  return jsonBlocks;
+};
+
+// 문서화 포맷팅 함수
+const formatDocumentation = (markdown: string) => {
+  // 간단한 마크다운 -> HTML 변환
+  return markdown
+    .replace(/## (.*)/g, '<h2 class="text-xl font-bold mt-6 mb-3 text-gray-800">$1</h2>')
+    .replace(/### (.*)/g, '<h3 class="text-lg font-semibold mt-4 mb-2 text-gray-700">$1</h3>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
+    .replace(/- (.*)/g, '<li class="ml-4 list-disc">$1</li>')
+    .replace(/\n\n/g, '<br/><br/>');
+};
+
+// AI 문서에서 파싱된 테이블 정보
+const aiTables = computed(() => {
+  if (!schemaInfo.value?.documentation) return [];
+  return parseAIDocumentation(schemaInfo.value.documentation);
+});
+
+// 컴포넌트 마운트 시 스키마 정보 로드
+onMounted(() => {
+  if (selectedConnectionId.value) {
+    loadSchemaInfo();
+  }
+});
+
+// Fallback 테이블 정보 (기존 하드코딩된 데이터)
+const fallbackTableInfo = [
   {
     name: 'customers',
     displayName: '👥 고객 (Customers)',
