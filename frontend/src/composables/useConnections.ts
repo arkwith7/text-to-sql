@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import { useApi } from './useApi';
 import { useAuth } from './useAuth';
+import { logger } from '@/utils/logger';
 
 export interface Connection {
   id: string;
@@ -39,33 +40,54 @@ export function useConnections() {
 
   // --- API wrapper helpers ---
   const fetchConnections = async () => {
-    const resp = await getConnections();
-    connections.value = resp.data as Connection[];
-    
-    // 선택된 connection이 목록에 없으면 해제
-    if (selectedConnectionId.value) {
-      const exists = connections.value.some((c) => c.id === selectedConnectionId.value);
-      if (!exists) {
+    try {
+      logger.debug('fetchConnections 시작');
+      const resp = await getConnections();
+      connections.value = resp.data as Connection[];
+      logger.success('연결 목록 로드 성공:', { count: connections.value.length });
+      
+      // 선택된 connection이 목록에 없으면 해제
+      if (selectedConnectionId.value) {
+        const exists = connections.value.some((c) => c.id === selectedConnectionId.value);
+        if (!exists) {
+          selectedConnectionId.value = null;
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+      
+      // 연결 목록이 있지만 선택된 것이 없으면 첫 번째 연결 자동 선택
+      if (connections.value.length > 0 && !selectedConnectionId.value) {
+        selectedConnectionId.value = connections.value[0].id;
+        localStorage.setItem(STORAGE_KEY, selectedConnectionId.value);
+      }
+      
+      // 선택된 연결이 있고 상태가 없으면 자동으로 테스트
+      if (selectedConnectionId.value) {
+        const selectedConn = connections.value.find(c => c.id === selectedConnectionId.value);
+        if (selectedConn && !selectedConn.status) {
+          try {
+            await testConnection(selectedConnectionId.value);
+          } catch (error) {
+            logger.warn('선택된 연결 자동 테스트 실패:', error);
+          }
+        }
+      }
+    } catch (error: any) {
+      logger.error('연결 목록 로드 실패:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+      
+      // 401 에러의 경우 빈 배열로 설정하고 조용히 처리
+      if (error.response?.status === 401) {
+        logger.warn('연결 목록 접근 권한 없음 - 빈 목록으로 설정');
+        connections.value = [];
         selectedConnectionId.value = null;
         localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-    
-    // 연결 목록이 있지만 선택된 것이 없으면 첫 번째 연결 자동 선택
-    if (connections.value.length > 0 && !selectedConnectionId.value) {
-      selectedConnectionId.value = connections.value[0].id;
-      localStorage.setItem(STORAGE_KEY, selectedConnectionId.value);
-    }
-    
-    // 선택된 연결이 있고 상태가 없으면 자동으로 테스트
-    if (selectedConnectionId.value) {
-      const selectedConn = connections.value.find(c => c.id === selectedConnectionId.value);
-      if (selectedConn && !selectedConn.status) {
-        try {
-          await testConnection(selectedConnectionId.value);
-        } catch (error) {
-          console.warn('선택된 연결 자동 테스트 실패:', error);
-        }
+      } else {
+        // 다른 에러는 다시 던지기
+        throw error;
       }
     }
   };

@@ -152,6 +152,34 @@
             <LogOut class="w-4 h-4" />
           </button>
         </div>
+        
+        <!-- Fallback UI when user info is not loaded -->
+        <div v-else-if="token" class="flex items-center" :class="isCollapsed ? 'justify-center' : ''">
+          <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center animate-pulse">
+            <User class="w-4 h-4 text-gray-600" />
+          </div>
+          <div v-if="!isCollapsed" class="ml-3 flex-1">
+            <p class="text-sm font-medium text-gray-500">사용자 정보 로딩 중...</p>
+          </div>
+          <button
+            v-if="!isCollapsed"
+            @click="logout"
+            class="text-gray-400 hover:text-gray-600"
+            title="로그아웃"
+          >
+            <LogOut class="w-4 h-4" />
+          </button>
+        </div>
+        
+        <!-- No token state -->
+        <div v-else class="flex items-center justify-center p-2">
+          <button
+            @click="router.push('/login')"
+            class="text-sm text-blue-600 hover:text-blue-800"
+          >
+            로그인 필요
+          </button>
+        </div>
       </div>
     </div>
 
@@ -409,6 +437,7 @@ import { useApi } from '@/composables/useApi';
 import { useChatSession } from '@/composables/useChatSession';
 import { useStreaming } from '@/composables/useStreaming';
 import { useConnections } from '@/composables/useConnections';
+import { logger } from '@/utils/logger';
 import ChatMessage from './ChatMessage.vue';
 import UserProfile from './UserProfile.vue';
 import DatabaseInfo from './DatabaseInfo.vue';
@@ -417,7 +446,7 @@ import ConnectionPanel from './ConnectionPanel.vue';
 import type { QueryResponse } from '@/types/api';
 
 const router = useRouter();
-const { user, logout: authLogout } = useAuth();
+const { user, logout: authLogout, fetchUserProfile, token } = useAuth();
 const { loading } = useApi();
 const {
   currentSession,
@@ -449,6 +478,17 @@ const {
 
 const activeTab = ref('chat');
 const currentMessage = ref('');
+
+// Watch user state changes
+watch(user, (newUser, oldUser) => {
+  logger.debug('User state changed in ChatInterface:', {
+    hasNewUser: !!newUser,
+    hasOldUser: !!oldUser,
+    newUserEmail: newUser?.email,
+    oldUserEmail: oldUser?.email
+  });
+}, { immediate: true });
+
 const isConnected = computed(() => {
   // 연결 ID가 있으면 입력 허용 (테스트 목적으로 조건 완화)
   const hasConnectionId = !!selectedConnectionId.value;
@@ -772,9 +812,36 @@ watch(
 );
 
 onMounted(async () => {
+  // Debug user state
+  logger.debug('ChatInterface mounted - User state:', {
+    hasUser: !!user.value,
+    userEmail: user.value?.email,
+    userFullName: user.value?.full_name,
+    hasToken: !!token.value
+  });
+  
+  // If we have a token but no user info, fetch user profile
+  if (token.value && !user.value) {
+    logger.debug('Token exists but no user info - fetching profile...');
+    await fetchUserProfile();
+  }
+  
   // Load user's chat sessions & connections
   await loadUserSessions();
-  await fetchConnections();
+  
+  try {
+    await fetchConnections();
+    logger.debug('연결 목록 로드 완료:', {
+      count: connections.value.length,
+      selectedId: selectedConnectionId.value
+    });
+  } catch (error: any) {
+    logger.warn('연결 목록 로드 중 오류 발생 (계속 진행):', {
+      status: error.response?.status,
+      message: error.message
+    });
+    // 연결 목록 로드 실패해도 애플리케이션은 계속 동작
+  }
   
   console.log('Connections loaded:', connections.value);
   console.log('Selected connection ID:', selectedConnectionId.value);

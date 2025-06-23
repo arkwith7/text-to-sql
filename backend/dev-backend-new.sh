@@ -14,14 +14,11 @@
 #
 # 🔧 수행 작업:
 #   1. .env 파일 존재 및 필수 환경변수 검증
-#   2. Redis 개발 컨테이너 자동 시작 (docker-compose.dev.yml)
-#   3. Python 가상환경 활성화 및 의존성 설치
-#   4. 백엔드 환경 설정 검증 (config.py 실행)
-#   5. FastAPI 개발 서버 시작 (uvicorn --reload)
+#   2. Python 가상환경 활성화 및 의존성 설치
+#   3. 백엔드 환경 설정 검증 (config.py 실행)
+#   4. FastAPI 개발 서버 시작 (uvicorn --reload)
 #
 # 📦 관리 대상:
-#   - Redis 개발 컨테이너: localhost:6379 (캐시 및 세션)
-#   - SQLite 데이터베이스: app_data.db (사용자 계정, 채팅 기록)
 #   - Python 가상환경: venv (백엔드 의존성)
 #   - FastAPI 서버: localhost:8000 (개발 서버)
 #
@@ -29,18 +26,19 @@
 #   - AZURE_OPENAI_ENDPOINT: Azure OpenAI 서비스 엔드포인트
 #   - AZURE_OPENAI_API_KEY: Azure OpenAI API 키
 #   - AZURE_OPENAI_DEPLOYMENT_NAME: 배포된 모델 이름
-#   - APP_DATABASE_URL: SQLite 데이터베이스 URL (내부 데이터)
-#   - REDIS_URL: Redis 연결 URL (캐시 및 세션)
+#   - DATABASE_URL: PostgreSQL 연결 URL (외부 데이터베이스)
+#   - REDIS_URL: Redis 연결 URL (외부 Redis)
 #   - SECRET_KEY: JWT 토큰 암호화 키
+#   - REFRESH_TOKEN_EXPIRE_DAYS: 리프레시 토큰 만료 기간
 #
 # 💡 개발 워크플로우:
-#   1. Redis 개발 컨테이너 자동 시작 (필요시)
+#   1. 외부 PostgreSQL과 Redis가 실행 중이어야 함
 #   2. 코드 변경 시 핫 리로드로 자동 반영
-#   3. 분석 대상 DB는 UI를 통해 동적 연결
+#   3. 백엔드 API만 로컬에서 개발 시 사용
 #
 # 🚨 주의사항:
-#   - Docker가 설치되어 있어야 함 (Redis 컨테이너용)
-#   - 포트 충돌 시 기존 서비스 확인 필요 (8000, 6379)
+#   - 외부 PostgreSQL과 Redis 서비스가 미리 실행되어 있어야 함
+#   - 포트 충돌 시 기존 서비스 확인 필요 (8000)
 
 echo "🐍 Starting Backend Development Server..."
 
@@ -70,60 +68,24 @@ if [ -z "$AZURE_OPENAI_ENDPOINT" ] || [ -z "$AZURE_OPENAI_API_KEY" ] || [ -z "$A
     exit 1
 fi
 
-if [ -z "$APP_DATABASE_URL" ]; then
-    echo "⚠️  APP_DATABASE_URL not found in .env file, using default SQLite"
-    export APP_DATABASE_URL="sqlite:///../app_data.db"
+if [ -z "$DATABASE_URL" ]; then
+    echo "❌ DATABASE_URL not found in .env file"
+    echo "   Please ensure external PostgreSQL is running and DATABASE_URL is set"
+    exit 1
 fi
 
 if [ -z "$REDIS_URL" ]; then
-    echo "⚠️  REDIS_URL not found in .env file, using default localhost Redis"
-    export REDIS_URL="redis://localhost:6379"
+    echo "❌ REDIS_URL not found in .env file"
+    echo "   Please ensure external Redis is running and REDIS_URL is set"
+    exit 1
 fi
 
 echo "✅ Environment configuration validated"
 echo ""
 echo "📊 Configuration Summary:"
-echo "   App Database: SQLite (${APP_DATABASE_URL})"
-echo "   Redis: ${REDIS_URL}"
+echo "   Database: External PostgreSQL (${DATABASE_URL})"
+echo "   Redis: External Redis (${REDIS_URL})"
 echo "   Azure OpenAI: ${AZURE_OPENAI_ENDPOINT}"
-
-# Check if Docker is available and start Redis development container
-echo ""
-echo "🐳 Checking Redis development container..."
-if command -v docker &> /dev/null; then
-    # Check if Redis container is running
-    if ! docker ps | grep -q "redis-dev"; then
-        echo "🔄 Starting Redis development container..."
-        if [ -f "../docker-compose.dev.yml" ]; then
-            cd ".." || exit 1
-            docker-compose -f docker-compose.dev.yml up -d redis-dev
-            cd "backend" || exit 1
-            echo "✅ Redis development container started"
-            
-            # Wait for Redis to be ready
-            echo "⏳ Waiting for Redis to be ready..."
-            timeout=30
-            while [ $timeout -gt 0 ]; do
-                if docker exec redis-dev redis-cli ping &>/dev/null; then
-                    echo "✅ Redis is ready"
-                    break
-                fi
-                sleep 1
-                timeout=$((timeout - 1))
-            done
-            
-            if [ $timeout -eq 0 ]; then
-                echo "⚠️  Redis container started but not responding to ping"
-            fi
-        else
-            echo "⚠️  docker-compose.dev.yml not found, assuming external Redis"
-        fi
-    else
-        echo "✅ Redis development container is already running"
-    fi
-else
-    echo "⚠️  Docker not found, assuming external Redis is running"
-fi
 
 echo ""
 echo "📂 Changing to backend directory..."
@@ -152,7 +114,7 @@ if python -c "from core.config import get_settings, validate_settings; validate_
 else
     echo "❌ Backend configuration validation failed"
     echo "   Please check your .env file and config.py settings"
-    echo "   Make sure external PostgreSQL (Northwind) and Redis (Docker Compose) are running"
+    echo "   Make sure external PostgreSQL and Redis services are running"
     exit 1
 fi
 
@@ -163,13 +125,12 @@ echo "   Docs: http://localhost:8000/docs"
 echo "   Interactive Docs: http://localhost:8000/redoc"
 echo "   Health Check: http://localhost:8000/health"
 echo ""
-echo "🗄️  Dependencies:"
-echo "   App Database: ${APP_DATABASE_URL}"
+echo "🗄️  External Dependencies:"
+echo "   PostgreSQL: ${DATABASE_URL}"
 echo "   Redis: ${REDIS_URL}"
-echo "   RedisInsight: http://localhost:8001 (if using dev container)"
 echo ""
 echo "💡 Press Ctrl+C to stop the server"
-echo "💡 Analyze target databases can be configured via UI"
+echo "💡 Make sure external PostgreSQL and Redis services are running"
 echo ""
 
 # Start the development server with auto-reload

@@ -80,28 +80,43 @@ class ConnectionService:
 
     async def test_connection(self, user_id: str, connection_id: str) -> Dict[str, Any]:
         """Test database connection by attempting to connect."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"🔍 연결 조회 시작: user_id={user_id}, connection_id={connection_id}")
+        
         conn_data = await self.get_connection(user_id, connection_id)
         if not conn_data:
+            logger.error(f"❌ 연결을 찾을 수 없음: connection_id={connection_id}")
             return {"success": False, "error": "Connection not found"}
         
         # 연결 정보 로깅 (비밀번호 제외)
         connection_info = f"{conn_data['connection_name']} ({conn_data['db_type']}://{conn_data['db_user']}@{conn_data['db_host']}:{conn_data['db_port']}/{conn_data['db_name']})"
+        logger.info(f"🔍 연결 정보: {connection_info}")
         
         try:
             # Extract connection parameters
             db_password = conn_data.get("db_password", "")
             db_type = conn_data["db_type"].lower()
             
+            logger.info(f"🔍 데이터베이스 타입: {db_type}")
+            logger.info(f"🔍 비밀번호 존재 여부: {'있음' if db_password else '없음'}")
+            
             if db_type == "postgresql":
                 # PostgreSQL 연결 테스트
                 dsn = f"postgresql://{conn_data['db_user']}:{db_password}@{conn_data['db_host']}:{conn_data['db_port']}/{conn_data['db_name']}"
+                dsn_safe = f"postgresql://{conn_data['db_user']}:***@{conn_data['db_host']}:{conn_data['db_port']}/{conn_data['db_name']}"
+                
+                logger.info(f"🔗 PostgreSQL 연결 시도: {dsn_safe}")
                 
                 # 연결 테스트 (타임아웃 5초)
+                logger.info("⏱️ 연결 대기 중... (최대 5초)")
                 conn = await asyncio.wait_for(
                     asyncpg.connect(dsn), 
                     timeout=5.0
                 )
                 
+                logger.info("✅ 연결 성공, 테스트 쿼리 실행 중...")
                 # 간단한 쿼리 실행으로 연결 확인
                 await conn.fetch("SELECT 1")
                 await conn.close()
@@ -158,5 +173,12 @@ class ConnectionService:
             "updated_at": connection.updated_at.isoformat()
         }
         if decrypt and connection.encrypted_db_password:
-            data['db_password'] = encryption_service.decrypt(connection.encrypted_db_password)
+            try:
+                data['db_password'] = encryption_service.decrypt(connection.encrypted_db_password)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"❌ 비밀번호 복호화 실패: connection_id={connection.id}, error={str(e)}")
+                # 복호화 실패 시 빈 비밀번호로 설정하여 연결 테스트에서 명확한 에러 발생
+                data['db_password'] = ""
         return data 

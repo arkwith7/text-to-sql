@@ -11,6 +11,10 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# Set build-time environment variable
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 EXPOSE 3000
 
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]

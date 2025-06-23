@@ -117,7 +117,21 @@ async def test_connection(
     session = Depends(get_session)
 ):
     """Test a database connection."""
-    service = ConnectionService(session)
-    user_id = current_user.get("id") if isinstance(current_user, dict) else current_user.id
-    result = await service.test_connection(user_id=user_id, connection_id=connection_id)
-    return result 
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info(f"🔌 연결 테스트 시작: connection_id={connection_id}")
+        service = ConnectionService(session)
+        user_id = current_user.get("id") if isinstance(current_user, dict) else current_user.id
+        logger.info(f"🔌 사용자 ID: {user_id}")
+        
+        result = await service.test_connection(user_id=user_id, connection_id=connection_id)
+        logger.info(f"🔌 연결 테스트 결과: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"💥 연결 테스트 중 예외 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Connection test failed: {str(e)}"
+        ) 

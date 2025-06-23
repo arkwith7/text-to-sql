@@ -1,37 +1,56 @@
-version: '3.8'
 
 services:
-  # Note: Using existing PostgreSQL container (northwind-postgres)
-  # Make sure your existing container has Northwind data loaded
+  # Redis Stack for production (캐시 및 세션 저장소)
+  redis-stack:
+    image: redis/redis-stack:latest
+    container_name: redis-stack-prod
+    ports:
+      - "6380:6379"  # 개발환경과 포트 분리
+    networks:
+      - text-to-sql-network
+    volumes:
+      - redis-prod-data:/data
 
   # Backend API (FastAPI)
   backend:
     build: ./backend
     container_name: text-to-sql-backend
     ports:
-      - "8070:8000"
+      - "8070:8000"  # 외부:8070 -> 내부:8000
     environment:
-      - DATABASE_URL=postgresql://postgres:password@host.docker.internal:5432/northwind
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
       - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION}
       - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME}
+      - APP_DATABASE_URL=sqlite:///app_data.db
+      - REDIS_URL=redis://redis-stack:6379
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+      - NODE_ENV=production
     networks:
       - text-to-sql-network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis-stack
     volumes:
       - ./backend:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      - backend-data:/app/data
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
 
   # Frontend (Vue.js)
   frontend:
-    build: ./frontend
+    build: 
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
     container_name: text-to-sql-frontend
     ports:
-      - "8080:3000"
+      - "8080:3000"  # 외부:8080 -> 내부:3000
     environment:
-      - VITE_API_BASE_URL=http://localhost:8000
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      - NODE_ENV=production
     depends_on:
       - backend
     networks:
@@ -40,9 +59,10 @@ services:
       - ./frontend:/app
       - /app/node_modules
 
-volumes:
-  postgres_data:
-
 networks:
   text-to-sql-network:
     driver: bridge
+
+volumes:
+  redis-prod-data:
+  backend-data:

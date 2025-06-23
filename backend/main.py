@@ -237,14 +237,32 @@ app = FastAPI(
 )
 
 # Add middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+settings = get_settings()
+if settings.environment != "production":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:3000", 
+            "http://localhost:3001", 
+            "http://127.0.0.1:3000", 
+            "http://127.0.0.1:3001",
+            "http://52.231.105.218:8080",
+            "http://text-to-sql-frontend:3000"
+        ],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 if get_settings().environment == "production":
     app.add_middleware(
         TrustedHostMiddleware, 

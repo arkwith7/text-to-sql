@@ -1,18 +1,46 @@
 <template>
   <div class="max-w-4xl mx-auto space-y-6">
-    <!-- Debug Information (임시) - 토큰이 있지만 사용자 정보가 없을 때만 표시 -->
-    <div v-if="!user && token && !loading" class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-      <p class="text-yellow-800">
-        🔍 디버그: 사용자 정보가 로드되지 않았습니다. 
-        토큰 상태: {{ !!token }}, 로딩 상태: {{ loading }}, 오류: {{ error }}
-      </p>
-      <button 
-        @click="retryLoadUser"
-        class="mt-2 px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
-      >
-        사용자 정보 다시 로드
-      </button>
+    <!-- User Loading State -->
+    <div v-if="!user && token && loading" class="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+      <p class="text-blue-800 font-medium">사용자 정보를 불러오는 중...</p>
     </div>
+
+    <!-- Error State with Retry -->
+    <div v-else-if="!user && token && !loading" class="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+      <div class="text-center">
+        <AlertCircle class="w-12 h-12 text-yellow-600 mx-auto mb-4" />
+        <h3 class="text-lg font-medium text-yellow-800 mb-2">사용자 정보를 불러올 수 없습니다</h3>
+        <p class="text-yellow-700 mb-4">
+          {{ error || '네트워크 연결을 확인하고 다시 시도해주세요.' }}
+        </p>
+        <button 
+          @click="retryLoadUser"
+          class="inline-flex items-center px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+        >
+          <RotateCcw class="w-4 h-4 mr-2" />
+          다시 시도
+        </button>
+      </div>
+    </div>
+
+    <!-- No Token State -->
+    <div v-else-if="!token" class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+      <div class="text-red-800">
+        <AlertCircle class="w-12 h-12 text-red-600 mx-auto mb-4" />
+        <h3 class="text-lg font-medium mb-2">인증이 필요합니다</h3>
+        <p class="mb-4">로그인 후 이용해주세요.</p>
+        <button 
+          @click="router.push('/login')"
+          class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+        >
+          로그인하기
+        </button>
+      </div>
+    </div>
+
+    <!-- Profile Content - Only show when user data is loaded -->
+    <template v-else-if="user">
 
     <!-- Profile Header -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -342,6 +370,7 @@
         </button>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -357,6 +386,7 @@ import {
   AlertCircle 
 } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
+import { logger } from '@/utils/logger';
 import type { TokenUsageStats, ModelStatsResponse } from '@/types/api';
 
 const router = useRouter();
@@ -421,13 +451,13 @@ const loadModelStats = async () => {
 
 // 사용자 정보 재로드 함수 (디버깅용)
 const retryLoadUser = async () => {
-  console.log('🔄 사용자 정보 재로드 시도...', {
+  logger.debug('사용자 정보 재로드 시도...', {
     hasToken: !!token.value,
     tokenLength: token.value?.length
   });
   
   const success = await fetchUserProfile();
-  console.log('📊 사용자 정보 로드 결과:', {
+  logger.debug('사용자 정보 로드 결과:', {
     success,
     user: user.value,
     error: error.value
@@ -451,35 +481,32 @@ const logout = async () => {
 };
 
 onMounted(async () => {
-  console.log('📱 UserProfile 컴포넌트 마운트됨', debugInfo.value);
+  logger.debug('UserProfile 컴포넌트 마운트됨', debugInfo.value);
   
   // 토큰이 없으면 바로 로그인 페이지로 리다이렉션
   if (!token.value) {
-    console.log('🔒 토큰이 없어서 로그인 페이지로 리다이렉션');
+    logger.warn('토큰이 없어서 로그인 페이지로 리다이렉션');
     await router.push('/login');
     return;
   }
   
-  // 인증 상태 초기화
+  // 인증 상태 초기화 (사용자 정보 로드)
   await initializeAuth();
   
-  // 사용자 정보가 여전히 없으면 다시 로드 시도
+  // 사용자 정보가 여전히 없으면 한 번 더 시도
   if (!user.value && token.value) {
-    console.log('👤 사용자 정보가 없어서 다시 로드 시도');
+    logger.debug('사용자 정보가 없어서 다시 로드 시도');
     await retryLoadUser();
   }
   
-  // 여전히 사용자 정보가 없으면 로그인 페이지로 이동
-  if (!user.value) {
-    console.log('🔒 사용자 정보 로드 실패 - 로그인 페이지로 리다이렉션');
-    await router.push('/login');
-    return;
+  // 여전히 사용자 정보가 없지만 토큰이 있다면 UI에서 처리 (리다이렉션 하지 않음)
+  if (!user.value && token.value) {
+    logger.warn('사용자 정보 로드 실패하지만 토큰 존재 - UI에서 재시도 옵션 제공');
+    // 리다이렉션하지 않고 UI에서 재시도 버튼 표시
+  } else if (user.value) {
+    // 사용자 정보가 있으면 통계 로드
+    await loadStats();
+    await loadModelStats();
   }
-  
-  // 사용량 통계 로드
-  await loadStats();
-  
-  // 모델별 통계 로드
-  await loadModelStats();
 });
 </script>

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuth } from '@/composables/useAuth';
+import { logger } from '@/utils/logger';
 import Landing from '@/views/Landing.vue';
 import Home from '@/views/Home.vue';
 import Login from '@/views/Login.vue';
@@ -49,13 +50,26 @@ const router = createRouter({
 
 // Navigation guard
 router.beforeEach((to, _from, next) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, token } = useAuth();
+  
+  logger.router('Router guard check:', {
+    to: to.path,
+    requiresAuth: to.meta.requiresAuth,
+    requiresGuest: to.meta.requiresGuest,
+    isAuthenticated: isAuthenticated.value,
+    hasUser: !!user.value,
+    hasToken: !!token.value,
+    tokenPrefix: token.value?.substring(0, 10) + '...'
+  });
   
   if (to.meta.requiresAuth && !isAuthenticated.value) {
+    logger.warn('Access denied - redirecting to login');
     next('/login');
   } else if (to.meta.requiresGuest && isAuthenticated.value) {
+    logger.info('Already authenticated - redirecting to home');
     next('/home');
   } else {
+    logger.debug('Navigation allowed');
     next();
   }
 });

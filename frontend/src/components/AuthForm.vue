@@ -130,6 +130,7 @@ import { ref, reactive } from 'vue';
 import { BarChart3, AlertCircle } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
 import { useLogin } from '@/composables/useLogin';
+import { logger } from '@/utils/logger';
 import type { UserCreate, UserLogin } from '@/types/api';
 
 const emit = defineEmits<{
@@ -180,22 +181,22 @@ const handleSubmit = async () => {
 };
 
 const handleDemoLogin = async () => {
-  console.log('🎯 데모 로그인 시작...');
+  logger.debug('데모 로그인 시작...');
   
   try {
-    console.log('📞 데모 로그인 API 호출...');
+    logger.api('데모 로그인 API 호출...');
     const success = await loginDemo();
     
     if (success) {
-      console.log('✅ 데모 로그인 성공');
+      logger.success('데모 로그인 성공');
       emit('success');
     } else {
-      console.log('❌ 데모 로그인 실패');
-      console.log('Error details:', error.value);
+      logger.error('데모 로그인 실패');
+      logger.debug('Error details:', error.value);
       // useAuth에서 설정된 error를 사용
     }
   } catch (err) {
-    console.error('💥 데모 로그인 예외 발생:', err);
+    logger.error('데모 로그인 예외 발생:', err);
   }
 };
 </script>

@@ -42,8 +42,8 @@ export function useApi() {
   const healthCheck = () => api.get('/health');
 
   // Database Connection Management
-  const getConnections = () => api.get<any[]>('/api/v1/connections');
-  const createConnection = (data: any) => api.post<any>('/api/v1/connections', data);
+  const getConnections = () => api.get<any[]>('/api/v1/connections/');
+  const createConnection = (data: any) => api.post<any>('/api/v1/connections/', data);
   const updateConnection = (id: string, data: any) => api.put<any>(`/api/v1/connections/${id}`, data);
   const deleteConnection = (id: string) => api.delete<void>(`/api/v1/connections/${id}`);
   const testConnection = (id: string) => api.post<any>(`/api/v1/connections/${id}/test`);
