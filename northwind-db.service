@@ -1,0 +1,31 @@
+[Unit]
+Description=PostgreSQL Northwind Database for Text-to-SQL
+After=docker.service
+Requires=docker.service
+Before=text-to-sql.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=wjladmin
+Group=docker
+WorkingDirectory=/home/wjadmin/Dev/text-to-sql/postgre
+
+# Start command
+ExecStart=/bin/bash -c 'cd /home/wjladmin/Dev/text-to-sql/postgre && ./setup-northwind.sh'
+
+# Stop command
+ExecStop=/usr/bin/docker stop northwind-db || true
+ExecStop=/usr/bin/docker rm northwind-db || true
+
+# Environment
+Environment=POSTGRES_DB=northwind
+Environment=POSTGRES_USER=postgres
+Environment=POSTGRES_PASSWORD=password
+
+# Restart policy
+TimeoutStartSec=120
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

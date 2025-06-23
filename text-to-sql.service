@@ -1,0 +1,33 @@
+[Unit]
+Description=Text-to-SQL Application Stack
+After=docker.service
+Requires=docker.service
+Wants=network-online.target
+After=network-online.target
+# northwind-db는 독립적으로 관리됨 (의존성 제거)
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=wjladmin
+Group=docker
+WorkingDirectory=/home/wjadmin/Dev/text-to-sql
+
+# Start command
+ExecStart=/usr/bin/docker-compose --env-file .env.production up -d
+
+# Stop command
+ExecStop=/usr/bin/docker-compose --env-file .env.production down
+
+# Reload command
+ExecReload=/usr/bin/docker-compose --env-file .env.production restart
+
+# Environment
+Environment=COMPOSE_PROJECT_NAME=text-to-sql
+
+# Restart policy
+TimeoutStartSec=300
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
