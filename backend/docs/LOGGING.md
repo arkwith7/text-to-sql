@@ -5,6 +5,7 @@ Text-to-SQL AI Agent의 포괄적인 로깅 시스템 사용법과 구조에 대
 ## 📊 로깅 시스템 구조
 
 ### 로그 파일 구조
+
 ```
 logs/
 ├── app.log                 # 전체 애플리케이션 로그 (JSON 형식)
@@ -17,6 +18,7 @@ logs/
 ```
 
 ### 로그 포맷
+
 모든 로그는 JSON 형식으로 저장되며 다음 필드를 포함합니다:
 
 ```json
@@ -39,6 +41,7 @@ logs/
 ## 🔧 설정
 
 ### 환경 변수
+
 ```bash
 # 로깅 레벨 설정
 LOG_LEVEL=INFO
@@ -78,6 +81,7 @@ SENSITIVE_DATA_PATTERNS=["password", "token", "secret", "key"]
 편의 스크립트 `manage_logs.py`를 사용하여 로그를 관리할 수 있습니다:
 
 ### 기본 사용법
+
 ```bash
 # 로그 파일 상태 확인
 python manage_logs.py status
@@ -105,6 +109,7 @@ python manage_logs.py cleanup --days 30 --dry-run
 ```
 
 ### 고급 분석
+
 ```bash
 # 특정 기간 에러 분석
 python -c "
@@ -129,6 +134,7 @@ print(f'느린 요청: {len(api_perf[\"slow_requests\"])}개')
 ## 📈 로깅 모범 사례
 
 ### 1. 구조화된 로깅
+
 ```python
 import logging
 from utils.logging_config import RequestLogger, SQLLogger, ChatLogger, AuthLogger
@@ -161,6 +167,7 @@ SQLLogger.log_query_execution(
 ```
 
 ### 2. 에러 로깅
+
 ```python
 try:
     # 위험한 작업
@@ -178,6 +185,7 @@ except Exception as e:
 ```
 
 ### 3. 성능 로깅
+
 ```python
 import time
 
@@ -202,6 +210,7 @@ finally:
 ## 🔍 로그 분석 예시
 
 ### 1. 에러 패턴 분석
+
 ```bash
 # 최근 24시간 에러 분석
 python manage_logs.py analyze --hours 24
@@ -216,6 +225,7 @@ python manage_logs.py analyze --hours 24
 ```
 
 ### 2. 성능 모니터링
+
 ```bash
 # API 성능 분석
 python manage_logs.py analyze --detailed
@@ -233,6 +243,7 @@ python manage_logs.py analyze --detailed
 ```
 
 ### 3. 사용자 활동 분석
+
 ```python
 from utils.log_analyzer import LogAnalyzer
 
@@ -251,20 +262,24 @@ for user_id, activity in user_activity['top_active_users'].items():
 ## 🔧 문제 해결
 
 ### 로그 파일이 생성되지 않는 경우
+
 1. `logs/` 디렉토리 존재 확인
 2. 디렉토리 쓰기 권한 확인
 3. `LOG_TO_FILE=true` 설정 확인
 
 ### 로그 파일이 너무 큰 경우
+
 1. `LOG_FILE_MAX_SIZE_MB` 값 조정
 2. `LOG_FILE_BACKUP_COUNT` 증가
 3. 자동 정리 스케줄 설정:
+
    ```bash
    # crontab에 추가 (매일 자정 30일 이전 로그 정리)
    0 0 * * * cd /path/to/backend && python manage_logs.py cleanup --days 30
    ```
 
 ### 성능 영향 최소화
+
 1. 프로덕션에서는 `LOG_LEVEL=INFO` 또는 `WARNING` 사용
 2. `DEBUG_SQL_QUERIES=false` 설정
 3. `LOG_REQUEST_BODY=false` (민감한 정보 포함 시)
@@ -272,6 +287,7 @@ for user_id, activity in user_activity['top_active_users'].items():
 ## 📊 대시보드 및 모니터링
 
 ### 로그 기반 대시보드 생성
+
 ```python
 # 일일 리포트 생성 예시
 from utils.log_analyzer import LogAnalyzer
@@ -292,6 +308,7 @@ print(json.dumps(metrics, indent=2))
 ```
 
 ### 알림 설정
+
 ```python
 # 에러 임계값 초과 시 알림
 def check_error_threshold():
@@ -312,6 +329,7 @@ def check_error_threshold():
 ## 📝 로그 분석 자동화
 
 ### 주간 리포트 생성 스크립트
+
 ```bash
 #!/bin/bash
 # weekly_report.sh
