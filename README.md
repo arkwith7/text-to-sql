@@ -49,15 +49,18 @@ text-to-sql/
 ### 📋 지원 명령어
 
 #### 개발환경
+
 - `./manage.sh dev` - 개발환경 가이드 표시
 
 #### 운영환경
+
 - `./manage.sh prod start` - Docker Compose로 운영환경 시작
 - `./manage.sh prod stop` - 운영환경 중지
 - `./manage.sh prod restart` - 운영환경 재시작
 - `./manage.sh prod logs [service]` - 로그 확인
 
 #### 유틸리티
+
 - `./manage.sh status` - 전체 서비스 상태 확인
 - `./manage.sh cleanup` - 중지된 컨테이너 정리
 - `./manage.sh help` - 도움말 표시
@@ -80,11 +83,11 @@ cd backend
 
 #### 📦 개발 환경 구성
 
-| 서비스     | 저장 위치        | 포트   | 용도                |
-| ------- | ------------ | ---- | ----------------- |
-| SQLite  | `app_data.db` | -    | 사용자 계정, 채팅 기록     |
-| Redis   | `redis-dev`  | 6381 | 캐시/세션 저장소         |
-| FastAPI | -            | 8000 | 백엔드 API 서버        |
+| 서비스       | 저장 위치         | 포트     | 용도               |
+| --------- | ------------- | ------ | ---------------- |
+| SQLite    | `app_data.db` | -      | 사용자 계정, 채팅 기록    |
+| Redis     | `redis-dev`   | 6381   | 캐시/세션 저장소        |
+| FastAPI   | -             | 8000   | 백엔드 API 서버       |
 | **분석 대상** | **UI에서 연결**   | **동적** | **PostgreSQL 등** |
 
 #### 🌐 개발 환경 접속 정보
@@ -146,12 +149,12 @@ docker-compose down
 
 ### 🔗 운영환경 접속 정보
 
-| 서비스 | URL | 설명 |
-|--------|-----|------|
-| 프론트엔드 | http://localhost:8080 | Vue.js 웹 인터페이스 |
-| 백엔드 API | http://localhost:8070 | FastAPI 서버 |
-| API 문서 | http://localhost:8070/docs | Swagger UI |
-| Redis | localhost:6380 | 캐시/세션 저장소 |
+| 서비스     | URL                        | 설명             |
+| ------- | -------------------------- | -------------- |
+| 프론트엔드   | http://localhost:8080      | Vue.js 웹 인터페이스 |
+| 백엔드 API | http://localhost:8070      | FastAPI 서버     |
+| API 문서  | http://localhost:8070/docs | Swagger UI     |
+| Redis   | localhost:6380             | 캐시/세션 저장소      |
 
 ## ⚙️ 환경 설정
 
@@ -344,11 +347,11 @@ cd mssql
 
 ### 지원 데이터베이스
 
-| 데이터베이스 | 샘플 데이터 | 포트 | 특징 |
-|------------|------------|------|------|
-| PostgreSQL | Northwind | 5432 | 전자상거래 데이터 |
+| 데이터베이스        | 샘플 데이터         | 포트   | 특징          |
+| ------------- | -------------- | ---- | ----------- |
+| PostgreSQL    | Northwind      | 5432 | 전자상거래 데이터   |
 | MS SQL Server | AdventureWorks | 1433 | 제조업 ERP 데이터 |
-| SQLite | 앱 내장 | - | 사용자/채팅 데이터 |
+| SQLite        | 앱 내장           | -    | 사용자/채팅 데이터  |
 
 ## �📚 추가 문서
 

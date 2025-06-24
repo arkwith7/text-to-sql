@@ -36,15 +36,15 @@ cd mssql
 
 ## 📋 사용 가능한 명령어
 
-| 명령어 | 설명 |
-|--------|------|
-| `start` | MS SQL Server AdventureWorks 시작 |
-| `stop` | MS SQL Server AdventureWorks 중지 |
+| 명령어       | 설명                               |
+| --------- | -------------------------------- |
+| `start`   | MS SQL Server AdventureWorks 시작  |
+| `stop`    | MS SQL Server AdventureWorks 중지  |
 | `restart` | MS SQL Server AdventureWorks 재시작 |
-| `remove` | 컨테이너 완전 제거 |
-| `status` | 현재 상태 확인 |
-| `logs` | 로그 확인 |
-| `help` | 도움말 표시 |
+| `remove`  | 컨테이너 완전 제거                       |
+| `status`  | 현재 상태 확인                         |
+| `logs`    | 로그 확인                            |
+| `help`    | 도움말 표시                           |
 
 ## 🔍 샘플 쿼리
 
