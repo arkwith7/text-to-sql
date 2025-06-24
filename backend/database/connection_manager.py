@@ -354,6 +354,7 @@ class DatabaseManager:
     async def get_analysis_db_engine(self, connection_id: str, user_id: str):
         """
         Dynamically creates an SQLAlchemy engine for a user-defined analysis database.
+        Supports PostgreSQL and MS SQL Server.
         """
         from services.connection_service import ConnectionService
 
@@ -373,14 +374,22 @@ class DatabaseManager:
         db_name = conn_details['db_name']
         connection_name = conn_details['connection_name']
 
-        if db_type != 'postgresql':
-            raise NotImplementedError(f"Database type '{db_type}' is not yet supported.")
-        
         # 분석 대상 데이터베이스 연결 정보 로깅 (비밀번호 제외)
         connection_info = f"{connection_name} ({db_type}://{db_user}@{db_host}:{db_port}/{db_name})"
         print(f"🔗 분석 대상 데이터베이스 엔진 생성: {connection_info}")
         
-        analysis_db_url = f"postgresql+asyncpg://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        # 데이터베이스 타입별 연결 URL 생성
+        if db_type == 'postgresql':
+            analysis_db_url = f"postgresql+asyncpg://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        elif db_type == 'mssql' or db_type == 'sqlserver':
+            # MS SQL Server 연결 URL
+            # ODBC 드라이버 사용
+            analysis_db_url = f"mssql+aioodbc://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}?driver=ODBC+Driver+17+for+SQL+Server"
+        elif db_type == 'mysql':
+            # MySQL 지원 (향후 확장용)
+            raise NotImplementedError(f"Database type '{db_type}' support is planned but not yet implemented.")
+        else:
+            raise NotImplementedError(f"Database type '{db_type}' is not supported. Supported types: postgresql, mssql, sqlserver")
         
         # TODO: Cache the created engine based on connection_id
         return create_async_engine(analysis_db_url, pool_pre_ping=True)

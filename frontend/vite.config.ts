@@ -5,8 +5,8 @@ import path from 'path'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   
-  // 환경 변수 우선순위: process.env > .env 파일
-  const apiTarget = process.env.VITE_API_BASE_URL || env.VITE_API_BASE_URL || 
+  // 환경 변수 우선순위: .env 파일 우선 > process.env (IPv6 문제 해결)
+  const apiTarget = env.VITE_API_BASE_URL || process.env.VITE_API_BASE_URL || 
     (mode === 'development' ? 'http://127.0.0.1:8000' : '/api');
     
   console.log(`🔧 Vite Config - Mode: ${mode}, API Target: ${apiTarget}`);
@@ -21,16 +21,20 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      host: '0.0.0.0',
+      host: '127.0.0.1', // IPv4 강제
       port: 3000,
       watch: {
         usePolling: true
       },
       proxy: {
         '/api': {
-          target: apiTarget,
+          target: 'http://127.0.0.1:8000', // 하드코딩으로 IPv4 강제
           changeOrigin: true,
           secure: false,
+          // IPv6 문제 해결을 위한 추가 설정
+          headers: {
+            'Host': '127.0.0.1:8000'
+          },
           configure: (proxy, _options) => {
             proxy.on('error', (err, _req, _res) => {
               console.log('proxy error', err);
@@ -42,6 +46,14 @@ export default defineConfig(({ mode }) => {
               console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
             });
           },
+        },
+        '/health': {
+          target: 'http://127.0.0.1:8000',
+          changeOrigin: true,
+          secure: false,
+          headers: {
+            'Host': '127.0.0.1:8000'
+          }
         }
       }
     }

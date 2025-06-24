@@ -101,20 +101,49 @@ class SchemaService:
         print(f"🔍 _fetch_schema_from_db 시작: connection_id={connection_id}")
         
         try:
+            # 연결 정보 가져오기
+            from services.connection_service import ConnectionService
+            conn_service = ConnectionService(self.session)
+            conn_data = await conn_service.get_connection(user_id, connection_id)
+            if not conn_data:
+                raise ValueError(f"Connection not found: {connection_id}")
+            
+            db_type = conn_data['db_type'].lower()
+            print(f"🔍 데이터베이스 타입: {db_type}")
+            
             # 동적 엔진 생성
             engine = await db_manager.get_analysis_db_engine(connection_id, user_id)
             print(f"✅ 엔진 생성 성공")
         
             schema_info = []
             async with engine.connect() as conn:
-                # 테이블 목록 조회
-                tables_query = """
-                    SELECT table_name 
-                    FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_type = 'BASE TABLE'
-                    ORDER BY table_name;
-                """
+                # 데이터베이스 타입별로 다른 쿼리 사용
+                if db_type in ['postgresql', 'postgres']:
+                    # PostgreSQL용 쿼리
+                    tables_query = """
+                        SELECT table_name 
+                        FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_type = 'BASE TABLE'
+                        ORDER BY table_name;
+                    """
+                    
+                    schema_filter = "table_schema = 'public'"
+                    
+                elif db_type in ['mssql', 'sqlserver']:
+                    # MS SQL Server용 쿼리
+                    tables_query = """
+                        SELECT table_name 
+                        FROM information_schema.tables 
+                        WHERE table_type = 'BASE TABLE'
+                        AND table_schema NOT IN ('sys', 'information_schema')
+                        ORDER BY table_name;
+                    """
+                    
+                    schema_filter = "table_schema NOT IN ('sys', 'information_schema')"
+                    
+                else:
+                    raise ValueError(f"Unsupported database type: {db_type}")
                 
                 tables_result = await conn.execute(text(tables_query))
                 tables = [row[0] for row in tables_result.fetchall()]
@@ -122,20 +151,36 @@ class SchemaService:
                 
                 # 각 테이블의 컬럼 정보 조회
                 for table_name in tables:
-                    columns_query = """
-                        SELECT 
-                            column_name,
-                            data_type,
-                            is_nullable,
-                            column_default,
-                            character_maximum_length,
-                            numeric_precision,
-                            numeric_scale
-                        FROM information_schema.columns 
-                        WHERE table_schema = 'public' 
-                        AND table_name = :table_name
-                        ORDER BY ordinal_position;
-                    """
+                    if db_type in ['postgresql', 'postgres']:
+                        columns_query = """
+                            SELECT 
+                                column_name,
+                                data_type,
+                                is_nullable,
+                                column_default,
+                                character_maximum_length,
+                                numeric_precision,
+                                numeric_scale
+                            FROM information_schema.columns 
+                            WHERE table_schema = 'public' 
+                            AND table_name = :table_name
+                            ORDER BY ordinal_position;
+                        """
+                    else:  # MS SQL Server
+                        columns_query = """
+                            SELECT 
+                                column_name,
+                                data_type,
+                                is_nullable,
+                                column_default,
+                                character_maximum_length,
+                                numeric_precision,
+                                numeric_scale
+                            FROM information_schema.columns 
+                            WHERE table_name = :table_name
+                            AND table_schema NOT IN ('sys', 'information_schema')
+                            ORDER BY ordinal_position;
+                        """
                     
                     columns_result = await conn.execute(text(columns_query), {"table_name": table_name})
                     columns = []

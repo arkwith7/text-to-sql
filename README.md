@@ -17,7 +17,9 @@ text-to-sql/
 ├── frontend/              # Vue.js 프론트엔드
 ├── backend/              # FastAPI 백엔드
 │   └── dev-backend.sh    # 개발환경 시작 스크립트
-├── postgre/              # PostgreSQL 설정
+├── postgre/              # PostgreSQL Northwind 설정
+├── mssql/                # MS SQL Server AdventureWorks 설정
+│   └── setup-adventureworks.sh  # AdventureWorks 데이터베이스 설정
 ├── docs/                 # 프로젝트 문서
 ├── docker-compose.yml    # 운영 환경 (Docker Compose)
 ├── manage.sh            # 🎯 통합 관리 스크립트 (신규)
@@ -316,7 +318,39 @@ docker exec redis-dev redis-cli FLUSHALL
 - 개발용 시크릿 키는 프로덕션에서 변경 필요
 - `.env` 파일은 버전 관리에서 제외
 
-## 📚 추가 문서
+## �️ 샘플 데이터베이스
+
+Text-to-SQL 분석을 위한 샘플 데이터베이스를 제공합니다:
+
+### PostgreSQL Northwind
+
+```bash
+# Northwind 샘플 데이터베이스 시작
+cd postgre
+./setup-northwind.sh start
+
+# 연결 정보: localhost:5432, 사용자: postgres, DB: northwind
+```
+
+### MS SQL Server AdventureWorks
+
+```bash
+# AdventureWorks 샘플 데이터베이스 시작
+cd mssql  
+./setup-adventureworks.sh start
+
+# 연결 정보: localhost:1433, 사용자: sa, DB: AdventureWorks
+```
+
+### 지원 데이터베이스
+
+| 데이터베이스 | 샘플 데이터 | 포트 | 특징 |
+|------------|------------|------|------|
+| PostgreSQL | Northwind | 5432 | 전자상거래 데이터 |
+| MS SQL Server | AdventureWorks | 1433 | 제조업 ERP 데이터 |
+| SQLite | 앱 내장 | - | 사용자/채팅 데이터 |
+
+## �📚 추가 문서
 
 - [데이터베이스 스키마](docs/DB_SCHEMA.md)
 - [API 문서](docs/backend_api_list.md)

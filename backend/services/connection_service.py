@@ -135,9 +135,61 @@ class ConnectionService:
                 return {"success": False, "error": "Oracle support is not yet implemented"}
                 
             elif db_type in ["sqlserver", "mssql"]:
-                # MS SQL Server 연결 테스트 (향후 구현)
-                print(f"⚠️ MS SQL Server 연결 테스트는 향후 구현 예정: {connection_info}")
-                return {"success": False, "error": "MS SQL Server support is not yet implemented"}
+                # MS SQL Server 연결 테스트
+                try:
+                    import pyodbc
+                    
+                    # MS SQL Server 연결 문자열 구성
+                    connection_string = (
+                        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                        f"SERVER={conn_data['db_host']},{conn_data['db_port']};"
+                        f"DATABASE={conn_data['db_name']};"
+                        f"UID={conn_data['db_user']};"
+                        f"PWD={db_password};"
+                        f"Encrypt=yes;"
+                        f"TrustServerCertificate=yes;"
+                        f"Connection Timeout=5"
+                    )
+                    
+                    connection_string_safe = (
+                        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                        f"SERVER={conn_data['db_host']},{conn_data['db_port']};"
+                        f"DATABASE={conn_data['db_name']};"
+                        f"UID={conn_data['db_user']};"
+                        f"PWD=***;"
+                        f"Encrypt=yes;TrustServerCertificate=yes"
+                    )
+                    
+                    logger.info(f"🔗 MS SQL Server 연결 시도: {connection_string_safe}")
+                    
+                    # 동기 연결 테스트 (pyodbc는 비동기를 지원하지 않음)
+                    conn = pyodbc.connect(connection_string)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT @@VERSION")
+                    version_info = cursor.fetchone()[0]
+                    cursor.close()
+                    conn.close()
+                    
+                    print(f"✅ MS SQL Server 연결 성공: {connection_info}")
+                    logger.info(f"✅ MS SQL Server 연결 성공: {connection_info}")
+                    logger.info(f"📋 서버 버전: {version_info[:100]}...")
+                    
+                    return {"success": True, "message": "MS SQL Server connection successful", "version": version_info}
+                    
+                except ImportError:
+                    error_msg = "pyodbc package is not installed. Please install it to use MS SQL Server connections."
+                    print(f"❌ MS SQL Server 연결 실패: {error_msg}")
+                    return {"success": False, "error": error_msg}
+                except pyodbc.Error as e:
+                    error_msg = f"MS SQL Server connection error: {str(e)}"
+                    print(f"❌ MS SQL Server 연결 실패: {connection_info} - {error_msg}")
+                    logger.error(f"MS SQL Server 연결 실패: {connection_info} - {error_msg}")
+                    return {"success": False, "error": error_msg}
+                except Exception as e:
+                    error_msg = f"Unexpected error connecting to MS SQL Server: {str(e)}"
+                    print(f"❌ MS SQL Server 연결 중 예상치 못한 오류: {connection_info} - {error_msg}")
+                    logger.error(f"MS SQL Server 연결 오류: {connection_info} - {error_msg}")
+                    return {"success": False, "error": error_msg}
                 
             else:
                 print(f"❌ 지원하지 않는 데이터베이스 타입: {connection_info}")

@@ -6,7 +6,11 @@ aiosqlite
 # 기존 PostgreSQL 지원
 asyncpg==0.29.0
 
-# === 추가 데이터베이스 지원 (향후 구현) ===
+# === 추가 데이터베이스 지원 ===
+# MS SQL Server 지원 (✅ 활성화됨)
+aioodbc==0.4.0
+pyodbc==5.0.1
+
 # MySQL/MariaDB 지원시 필요:
 # aiomysql==0.2.0
 # PyMySQL==1.1.0
@@ -14,7 +18,3 @@ asyncpg==0.29.0
 # Oracle 지원시 필요:
 # oracledb==1.4.2
 # cx_Oracle==8.3.0
-
-# MS SQL Server 지원시 필요:
-# aioodbc==0.4.0
-# pyodbc==5.0.1
