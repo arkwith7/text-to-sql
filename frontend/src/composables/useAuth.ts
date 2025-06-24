@@ -245,6 +245,21 @@ export function useAuth() {
   };
 
   // Initialize auth state on page load
+  // 백엔드 연결 상태 확인
+  const checkBackendConnection = async (): Promise<boolean> => {
+    try {
+      // 간단한 헬스체크 엔드포인트 호출 (인증 불필요)
+      await api.get('/health', { timeout: 3000 });
+      return true;
+    } catch (error: any) {
+      logger.debug('백엔드 연결 실패:', {
+        code: error.code,
+        message: error.message
+      });
+      return false;
+    }
+  };
+
   const initializeAuth = async () => {
     const currentToken = token.value;
     const storedToken = localStorage.getItem('auth_token');
@@ -264,8 +279,17 @@ export function useAuth() {
       token.value = storedToken;
     }
     
+    // 토큰이 있는 경우에만 백엔드 연결 확인 후 프로필 로드
     if (token.value && !user.value) {
-      logger.debug('토큰은 있지만 사용자 정보 없음 - 프로필 로드 시도');
+      logger.debug('토큰은 있지만 사용자 정보 없음 - 백엔드 연결 확인 중');
+      
+      const isBackendConnected = await checkBackendConnection();
+      if (!isBackendConnected) {
+        logger.warn('백엔드가 연결되지 않음 - 인증 초기화 건너뜀');
+        return;
+      }
+      
+      logger.debug('백엔드 연결됨 - 프로필 로드 시도');
       const success = await fetchUserProfile();
       logger.debug('프로필 로드 결과:', { success, user: user.value });
     }

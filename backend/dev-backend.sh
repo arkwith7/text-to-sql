@@ -1,132 +1,151 @@
 #!/bin/bash
 
-# Backend Development Script
-# Run FastAPI backend in development mode
+# Backend Development Script - SQLite + Redis Only
+# Simple one-script solution for backend development setup
 #
-# 🎯 주요 기능:
-# - Text-to-SQL 백엔드 개발 환경 전용 시작 스크립트
-# - .env 파일 기반 환경 설정 자동 검증
-# - Python 가상환경 및 의존성 패키지 자동 설정
-# - FastAPI 개발 서버 핫 리로드 모드로 실행
+# 🎯 구성:
+# - SQLite: 앱 데이터베이스 (사용자 계정, 채팅 기록)
+# - Redis: 캐시/세션 저장소
+# - PostgreSQL: 분석 대상 DB (프론트엔드에서 동적 연결)
 #
 # 📋 사용법:
 #   ./dev-backend.sh
 #
 # 🔧 수행 작업:
-#   1. .env 파일 존재 및 필수 환경변수 검증
-#   2. Redis 개발 컨테이너 자동 시작 (docker-compose.dev.yml)
-#   3. Python 가상환경 활성화 및 의존성 설치
-#   4. 백엔드 환경 설정 검증 (config.py 실행)
-#   5. FastAPI 개발 서버 시작 (uvicorn --reload)
-#
-# 📦 관리 대상:
-#   - Redis 개발 컨테이너: localhost:6379 (캐시 및 세션)
-#   - SQLite 데이터베이스: app_data.db (사용자 계정, 채팅 기록)
-#   - Python 가상환경: venv (백엔드 의존성)
-#   - FastAPI 서버: localhost:8000 (개발 서버)
-#
-# ⚙️ 필수 환경 설정:
-#   - AZURE_OPENAI_ENDPOINT: Azure OpenAI 서비스 엔드포인트
-#   - AZURE_OPENAI_API_KEY: Azure OpenAI API 키
-#   - AZURE_OPENAI_DEPLOYMENT_NAME: 배포된 모델 이름
-#   - APP_DATABASE_URL: SQLite 데이터베이스 URL (내부 데이터)
-#   - REDIS_URL: Redis 연결 URL (캐시 및 세션)
-#   - SECRET_KEY: JWT 토큰 암호화 키
-#
-# 💡 개발 워크플로우:
-#   1. Redis 개발 컨테이너 자동 시작 (필요시)
-#   2. 코드 변경 시 핫 리로드로 자동 반영
-#   3. 분석 대상 DB는 UI를 통해 동적 연결
-#
-# 🚨 주의사항:
-#   - Docker가 설치되어 있어야 함 (Redis 컨테이너용)
-#   - 포트 충돌 시 기존 서비스 확인 필요 (8000, 6379)
+#   1. .env 파일 확인 및 환경변수 로드
+#   2. Redis 개발 컨테이너 생성/시작
+#   3. Python 가상환경 및 의존성 설치
+#   4. FastAPI 개발 서버 시작
 
-echo "🐍 Starting Backend Development Server..."
+echo "🐍 Starting Backend Development Environment..."
+
+# Function to wait for Redis
+wait_for_redis() {
+    local container_name=$1
+    echo "⏳ Waiting for Redis to be ready..."
+    for i in {1..30}; do
+        if docker exec $container_name redis-cli ping >/dev/null 2>&1; then
+            echo "✅ Redis is ready"
+            return 0
+        fi
+        echo "   Attempt $i/30: Redis not ready yet..."
+        sleep 1
+    done
+    echo "❌ Redis failed to start"
+    return 1
+}
 
 # Check if .env file exists in project root
 if [ ! -f "../.env" ]; then
-    echo "⚠️  .env file not found at ../.env. Copying from .env.example..."
+    echo "⚠️  .env file not found at ../.env"
     if [ -f "../.env.example" ]; then
+        echo "📝 Copying from .env.example..."
         cp "../.env.example" "../.env"
-        echo "📝 Please edit ../.env file with your Azure OpenAI credentials before continuing."
+        echo "✅ Please edit ../.env file with your Azure OpenAI credentials"
     else
         echo "❌ .env.example file not found. Please create ../.env file manually."
     fi
     exit 1
 fi
 
-# Source environment variables
+# Load environment variables
 echo "📋 Loading environment variables from ../.env..."
-set -a  # automatically export all variables
+set -a
 source "../.env"
 set +a
 
-# Check if required environment variables are set
-echo "🔍 Validating environment configuration..."
+# Check required Azure OpenAI settings
+echo "🔍 Validating Azure OpenAI configuration..."
 if [ -z "$AZURE_OPENAI_ENDPOINT" ] || [ -z "$AZURE_OPENAI_API_KEY" ] || [ -z "$AZURE_OPENAI_DEPLOYMENT_NAME" ]; then
     echo "❌ Missing required Azure OpenAI configuration in .env file"
     echo "   Please set: AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT_NAME"
     exit 1
 fi
 
-if [ -z "$APP_DATABASE_URL" ]; then
-    echo "⚠️  APP_DATABASE_URL not found in .env file, using default SQLite"
-    export APP_DATABASE_URL="sqlite:///../app_data.db"
+echo "✅ Azure OpenAI configuration validated"
+
+# Setup Redis Development Container
+REDIS_DEV_CONTAINER="redis-dev"
+REDIS_DEV_PORT="6381"
+
+echo ""
+echo "📱 Setting up Redis development container..."
+
+# Check if Redis port is available
+if lsof -Pi :$REDIS_DEV_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo "❌ Port $REDIS_DEV_PORT is already in use"
+    echo "   Please stop the service using this port or use a different port"
+    exit 1
 fi
 
-if [ -z "$REDIS_URL" ]; then
-    echo "⚠️  REDIS_URL not found in .env file, using default localhost Redis"
-    export REDIS_URL="redis://localhost:6379"
-fi
-
-echo "✅ Environment configuration validated"
-echo ""
-echo "📊 Configuration Summary:"
-echo "   App Database: SQLite (${APP_DATABASE_URL})"
-echo "   Redis: ${REDIS_URL}"
-echo "   Azure OpenAI: ${AZURE_OPENAI_ENDPOINT}"
-
-# Check if Docker is available and start Redis development container
-echo ""
-echo "🐳 Checking Redis development container..."
-if command -v docker &> /dev/null; then
-    # Check if Redis container is running
-    if ! docker ps | grep -q "redis-dev"; then
-        echo "🔄 Starting Redis development container..."
-        if [ -f "../docker-compose.dev.yml" ]; then
-            cd ".." || exit 1
-            docker-compose -f docker-compose.dev.yml up -d redis-dev
-            cd "backend" || exit 1
-            echo "✅ Redis development container started"
-            
-            # Wait for Redis to be ready
-            echo "⏳ Waiting for Redis to be ready..."
-            timeout=30
-            while [ $timeout -gt 0 ]; do
-                if docker exec redis-dev redis-cli ping &>/dev/null; then
-                    echo "✅ Redis is ready"
-                    break
-                fi
-                sleep 1
-                timeout=$((timeout - 1))
-            done
-            
-            if [ $timeout -eq 0 ]; then
-                echo "⚠️  Redis container started but not responding to ping"
-            fi
-        else
-            echo "⚠️  docker-compose.dev.yml not found, assuming external Redis"
-        fi
-    else
-        echo "✅ Redis development container is already running"
-    fi
+if docker ps --format "{{.Names}}" | grep -q "^${REDIS_DEV_CONTAINER}$"; then
+    echo "✅ Redis development container already running: ${REDIS_DEV_CONTAINER}"
+elif docker ps -a --format "{{.Names}}" | grep -q "^${REDIS_DEV_CONTAINER}$"; then
+    echo "🔄 Starting stopped Redis development container..."
+    docker start ${REDIS_DEV_CONTAINER}
+    wait_for_redis $REDIS_DEV_CONTAINER
 else
-    echo "⚠️  Docker not found, assuming external Redis is running"
+    echo "🚀 Creating Redis development container..."
+    docker run -d \
+        --name ${REDIS_DEV_CONTAINER} \
+        -p ${REDIS_DEV_PORT}:6379 \
+        --restart unless-stopped \
+        redis:7-alpine
+    
+    wait_for_redis $REDIS_DEV_CONTAINER
+fi
+
+# Setup SQLite database path
+SQLITE_DB_PATH="../app_data.db"
+echo ""
+echo "💾 SQLite database configuration..."
+echo "   Database file: ${SQLITE_DB_PATH}"
+if [ -f "$SQLITE_DB_PATH" ]; then
+    echo "✅ SQLite database file exists"
+else
+    echo "📝 SQLite database will be created automatically when needed"
+fi
+
+# Set environment variables for development
+export APP_DATABASE_URL="sqlite+aiosqlite:///${SQLITE_DB_PATH}"
+export REDIS_URL="redis://localhost:${REDIS_DEV_PORT}"
+
+# Set default values for missing environment variables
+if [ -z "$SECRET_KEY" ]; then
+    export SECRET_KEY="dev-secret-key-change-in-production"
+fi
+
+if [ -z "$JWT_SECRET_KEY" ]; then
+    export JWT_SECRET_KEY="dev-jwt-secret-key-change-in-production"
+fi
+
+if [ -z "$ACCESS_TOKEN_EXPIRE_MINUTES" ]; then
+    export ACCESS_TOKEN_EXPIRE_MINUTES="30"
+fi
+
+if [ -z "$REFRESH_TOKEN_EXPIRE_DAYS" ]; then
+    export REFRESH_TOKEN_EXPIRE_DAYS="7"
 fi
 
 echo ""
-echo "📂 Changing to backend directory..."
+echo "📊 Development Environment Summary:"
+echo "   SQLite: ${SQLITE_DB_PATH} (app database)"
+echo "   Redis: localhost:${REDIS_DEV_PORT} (cache/sessions)"
+echo "   Azure OpenAI: ${AZURE_OPENAI_ENDPOINT}"
+echo "   🔍 Analysis Target DBs: Configure via frontend UI"
+
+# Test Redis connection
+echo ""
+echo "🔗 Testing Redis connection..."
+if docker exec ${REDIS_DEV_CONTAINER} redis-cli ping >/dev/null 2>&1; then
+    echo "✅ Redis connection test successful"
+else
+    echo "❌ Redis connection test failed"
+    exit 1
+fi
+
+echo ""
+echo "📂 Setting up Python environment..."
 cd "$(dirname "$0")" || exit 1
 
 # Check if virtual environment exists
@@ -152,7 +171,6 @@ if python -c "from core.config import get_settings, validate_settings; validate_
 else
     echo "❌ Backend configuration validation failed"
     echo "   Please check your .env file and config.py settings"
-    echo "   Make sure external PostgreSQL (Northwind) and Redis (Docker Compose) are running"
     exit 1
 fi
 
@@ -163,14 +181,23 @@ echo "   Docs: http://localhost:8000/docs"
 echo "   Interactive Docs: http://localhost:8000/redoc"
 echo "   Health Check: http://localhost:8000/health"
 echo ""
-echo "🗄️  Dependencies:"
-echo "   App Database: ${APP_DATABASE_URL}"
-echo "   Redis: ${REDIS_URL}"
-echo "   RedisInsight: http://localhost:8001 (if using dev container)"
+echo "🗄️  Development Environment:"
+echo "   SQLite: ${SQLITE_DB_PATH} (app database)"
+echo "   Redis: ${REDIS_DEV_CONTAINER} (localhost:${REDIS_DEV_PORT})"
+echo ""
+echo "🔗 Analysis Target Databases:"
+echo "   PostgreSQL: Configure via frontend UI"
+echo "   Other DBs: Configure via frontend UI"
+echo ""
+echo "🛠️  Management Commands:"
+echo "   Stop Redis: docker stop ${REDIS_DEV_CONTAINER}"
+echo "   Remove Redis: docker rm ${REDIS_DEV_CONTAINER}"
+echo "   View Redis logs: docker logs ${REDIS_DEV_CONTAINER}"
+echo "   SQLite location: ${SQLITE_DB_PATH}"
 echo ""
 echo "💡 Press Ctrl+C to stop the server"
-echo "💡 Analyze target databases can be configured via UI"
+echo "💡 Redis container will continue running for future use"
 echo ""
 
 # Start the development server with auto-reload
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-delay 1
