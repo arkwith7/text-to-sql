@@ -1,4 +1,5 @@
 # 관리자 기능 상세 설계서
+
 ## Text-to-SQL 시스템 통제권 기반 관리자 기능 설계 및 구현 가이드
 
 ---
@@ -6,16 +7,19 @@
 ## 1. 개요
 
 ### 1.1 목적
+
 한국어 자연어 질의를 통한 Text-to-SQL 서비스의 사용자 만족도 향상을 위해 시스템 통제권 관점에서 5대 핵심 관리자 기능을 사용자 기능과 분리하여 구현합니다.
 
 ### 1.2 범위
+
 - 시스템 프롬프트 관리
-- 분석대상 데이터베이스 접속정보 관리  
+- 분석대상 데이터베이스 접속정보 관리
 - 분석대상 데이터베이스 스키마 메타데이터 관리
 - 사용자정보 및 권한 관리
 - LLM(거대언어모델) 접속정보 관리
 
 ### 1.3 설계 원칙
+
 - **보안 우선**: 민감한 정보의 안전한 관리
 - **확장성**: 새로운 기능 추가 용이성
 - **사용성**: 직관적인 관리자 인터페이스
@@ -26,6 +30,7 @@
 ## 2. 시스템 아키텍처
 
 ### 2.1 전체 구조
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    관리자 기능 계층                          │
@@ -41,6 +46,7 @@
 ```
 
 ### 2.2 관리자 기능 분리 구조
+
 ```
 관리자 전용:
 - /api/v1/admin/* (관리자 권한 필요)
@@ -60,6 +66,7 @@
 ### 3.1 관리자 기능 테이블 구조
 
 #### 3.1.1 시스템 프롬프트 관리 (system_prompts)
+
 ```sql
 CREATE TABLE system_prompts (
     id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -83,6 +90,7 @@ CREATE TABLE system_prompts (
 ```
 
 #### 3.1.2 스키마 메타데이터 확장 (schema_metadata)
+
 ```sql
 CREATE TABLE schema_metadata (
     id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -114,6 +122,7 @@ CREATE TABLE schema_metadata (
 ```
 
 #### 3.1.3 LLM 접속정보 관리 (llm_connections)
+
 ```sql
 CREATE TABLE llm_connections (
     id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -145,6 +154,7 @@ CREATE TABLE llm_connections (
 ```
 
 #### 3.1.4 사용자 권한 확장 (user_permissions)
+
 ```sql
 CREATE TABLE user_permissions (
     id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -168,6 +178,7 @@ CREATE TABLE user_permissions (
 ```
 
 #### 3.1.5 관리자 중앙 DB 접속정보 (managed_database_connections)
+
 ```sql
 CREATE TABLE managed_database_connections (
     id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -202,6 +213,7 @@ CREATE TABLE managed_database_connections (
 ### 3.2 기존 테이블 확장
 
 #### 3.2.1 users 테이블 확장
+
 ```sql
 ALTER TABLE users 
 ADD COLUMN daily_token_limit INTEGER DEFAULT 10000,
@@ -213,6 +225,7 @@ ADD COLUMN timezone VARCHAR(50) DEFAULT 'Asia/Seoul';
 ```
 
 #### 3.2.2 system_config 테이블 활용 확장
+
 기존 system_config 테이블을 활용하여 다음 설정들을 관리:
 - `SYSTEM_PROMPT_MAIN`: 메인 시스템 프롬프트
 - `LLM_DEFAULT_MODEL`: 기본 LLM 모델
@@ -226,6 +239,7 @@ ADD COLUMN timezone VARCHAR(50) DEFAULT 'Asia/Seoul';
 ### 4.1 관리자 API 엔드포인트
 
 #### 4.1.1 시스템 프롬프트 관리 API
+
 ```python
 # /api/v1/admin/system-prompts
 @router.get("/system-prompts")
@@ -259,6 +273,7 @@ async def activate_system_prompt(prompt_id: str):
 ```
 
 #### 4.1.2 스키마 메타데이터 관리 API
+
 ```python
 # /api/v1/admin/schema-metadata
 @router.get("/schema-metadata")
@@ -286,6 +301,7 @@ async def auto_generate_korean_names(
 ```
 
 #### 4.1.3 LLM 접속정보 관리 API
+
 ```python
 # /api/v1/admin/llm-connections
 @router.get("/llm-connections")
@@ -309,6 +325,7 @@ async def test_llm_connection(
 ```
 
 #### 4.1.4 관리형 DB 접속정보 API
+
 ```python
 # /api/v1/admin/managed-databases
 @router.get("/managed-databases")
@@ -335,6 +352,7 @@ async def assign_users_to_database(
 ### 4.2 Pydantic 모델
 
 #### 4.2.1 시스템 프롬프트 모델
+
 ```python
 class SystemPromptCreate(BaseModel):
     prompt_name: str = Field(..., max_length=100)
@@ -366,6 +384,7 @@ class SystemPromptResponse(BaseModel):
 ```
 
 #### 4.2.2 스키마 메타데이터 모델
+
 ```python
 class SchemaMetadataUpdate(BaseModel):
     connection_id: str
@@ -399,6 +418,7 @@ class SchemaMetadataResponse(BaseModel):
 ## 5. 서비스 계층 설계
 
 ### 5.1 시스템 프롬프트 서비스
+
 ```python
 class SystemPromptService:
     def __init__(self, db_session: Session):
@@ -421,6 +441,7 @@ class SystemPromptService:
 ```
 
 ### 5.2 스키마 메타데이터 서비스
+
 ```python
 class SchemaMetadataService:
     def __init__(self, db_session: Session, llm_service: LLMService):
@@ -441,6 +462,7 @@ class SchemaMetadataService:
 ```
 
 ### 5.3 LLM 연결 관리 서비스
+
 ```python
 class LLMConnectionService:
     def __init__(self, db_session: Session, encryption_service: EncryptionService):
@@ -465,6 +487,7 @@ class LLMConnectionService:
 ## 6. 프론트엔드 설계
 
 ### 6.1 관리자 대시보드 구조
+
 ```
 AdminDashboard/
 ├── SystemPromptManagement/
@@ -492,6 +515,7 @@ AdminDashboard/
 ### 6.2 주요 컴포넌트
 
 #### 6.2.1 시스템 프롬프트 편집기
+
 ```vue
 <template>
   <div class="prompt-editor">
@@ -535,6 +559,7 @@ AdminDashboard/
 ```
 
 #### 6.2.2 스키마 메타데이터 관리
+
 ```vue
 <template>
   <div class="schema-metadata-manager">
@@ -587,6 +612,7 @@ AdminDashboard/
 ```
 
 ### 6.3 라우터 설정
+
 ```typescript
 // src/router/admin.ts
 const adminRoutes = [
@@ -635,6 +661,7 @@ const adminRoutes = [
 ## 7. 보안 및 권한 관리
 
 ### 7.1 RBAC 구현
+
 ```python
 class PermissionChecker:
     @staticmethod
@@ -665,6 +692,7 @@ class PermissionChecker:
 ```
 
 ### 7.2 데이터 암호화
+
 ```python
 class EncryptionService:
     def __init__(self, encryption_key: str):
@@ -688,6 +716,7 @@ class EncryptionService:
 ```
 
 ### 7.3 감사 로그
+
 ```python
 class AuditLogger:
     @staticmethod
@@ -728,40 +757,37 @@ class AuditLogger:
 ## 8. 구현 단계별 계획
 
 ### 8.1 Phase 1: 기반 구축 (2-3주)
+
 1. **데이터베이스 스키마 생성**
    - 새 테이블 생성 및 기존 테이블 확장
    - 마이그레이션 스크립트 작성
-
 2. **기본 API 구현**
    - 시스템 프롬프트 관리 API
    - LLM 접속정보 관리 API
-
 3. **권한 시스템 강화**
    - 세분화된 RBAC 구현
    - 감사 로그 시스템 구축
 
 ### 8.2 Phase 2: 핵심 기능 (3-4주)
+
 1. **스키마 메타데이터 관리**
    - 한국어 명칭 관리 시스템
    - LLM 기반 자동 생성 기능
-
 2. **관리자 대시보드 개발**
    - 프론트엔드 컴포넌트 구현
    - 관리자 전용 UI/UX 설계
-
 3. **DB 접속정보 중앙 관리**
    - 관리형 데이터베이스 연결 시스템
    - 사용자별 접근 권한 관리
 
 ### 8.3 Phase 3: 고급 기능 및 최적화 (2-3주)
+
 1. **성능 최적화**
    - 캐싱 시스템 구현
    - 대용량 데이터 처리 최적화
-
 2. **모니터링 및 알림**
    - 시스템 상태 모니터링
    - 이상 상황 알림 시스템
-
 3. **사용자 경험 개선**
    - 직관적인 UI 개선
    - 도움말 및 가이드 시스템
@@ -771,6 +797,7 @@ class AuditLogger:
 ## 9. 테스트 전략
 
 ### 9.1 단위 테스트
+
 ```python
 class TestSystemPromptService:
     def test_create_prompt(self):
@@ -791,6 +818,7 @@ class TestSchemaMetadataService:
 ```
 
 ### 9.2 통합 테스트
+
 ```python
 class TestAdminWorkflow:
     def test_complete_schema_setup(self):
@@ -809,6 +837,7 @@ class TestAdminWorkflow:
 ```
 
 ### 9.3 보안 테스트
+
 ```python
 class TestSecurity:
     def test_admin_authorization(self):
@@ -826,6 +855,7 @@ class TestSecurity:
 ## 10. 운영 및 유지보수
 
 ### 10.1 모니터링
+
 ```python
 class AdminMetricsCollector:
     @staticmethod
@@ -842,6 +872,7 @@ class AdminMetricsCollector:
 ```
 
 ### 10.2 백업 및 복구
+
 ```python
 class ConfigBackupService:
     @staticmethod
@@ -858,6 +889,7 @@ class ConfigBackupService:
 ```
 
 ### 10.3 업그레이드 전략
+
 1. **하위 호환성 유지**: 기존 API 및 데이터 구조 호환성 보장
 2. **점진적 마이그레이션**: 단계별 기능 업그레이드
 3. **롤백 계획**: 문제 발생 시 즉시 이전 버전으로 롤백
@@ -867,16 +899,19 @@ class ConfigBackupService:
 ## 11. 예상 효과 및 ROI
 
 ### 11.1 즉시 효과
+
 - **보안 강화**: 민감한 시스템 설정의 안전한 관리
 - **운영 효율성**: 실시간 시스템 설정 변경 가능
 - **사용자 만족도**: 한국어 친화적 스키마 정보 제공
 
 ### 11.2 중장기 효과
+
 - **확장성**: 새로운 LLM 모델 및 데이터베이스 쉬운 추가
 - **비용 최적화**: LLM 사용량 모니터링 및 제어
 - **서비스 품질**: 최적화된 프롬프트를 통한 응답 품질 향상
 
 ### 11.3 ROI 측정 지표
+
 - 시스템 설정 변경 시간 단축: 기존 대비 80% 감소
 - 사용자 쿼리 성공률 향상: 한국어 스키마 정보 제공으로 15-20% 향상
 - 운영 비용 절감: LLM 토큰 사용량 최적화로 월 비용 10-15% 절감
