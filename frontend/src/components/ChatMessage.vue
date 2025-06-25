@@ -97,14 +97,34 @@
                     class="text-xs border border-gray-300 rounded px-2 py-1"
                   >
                     <option value="table">테이블</option>
-                    <option value="chart">차트</option>
+                    <option value="chart" :disabled="!isDataChartable">
+                      차트{{ !isDataChartable ? ' (불가능)' : '' }}
+                    </option>
+                  </select>
+                  <select
+                    v-if="selectedView === 'chart' && isDataChartable"
+                    v-model="selectedChartType"
+                    class="text-xs border border-gray-300 rounded px-2 py-1"
+                  >
+                    <option value="bar">막대차트</option>
+                    <option value="line">선차트</option>
+                    <option value="pie">파이차트</option>
                   </select>
                   <button
                     @click="saveQuery"
-                    class="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                    :class="[
+                      'text-xs flex items-center transition-all duration-300',
+                      isSaved 
+                        ? 'text-green-600 hover:text-green-800' 
+                        : 'text-blue-600 hover:text-blue-800'
+                    ]"
+                    :disabled="isSaved"
                   >
-                    <Bookmark class="w-3 h-3 mr-1" />
-                    저장
+                    <Bookmark v-if="!isSaved" class="w-3 h-3 mr-1" />
+                    <svg v-else class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    {{ isSaved ? '저장됨' : '저장' }}
                   </button>
                 </div>
               </div>
@@ -152,10 +172,18 @@
               </div>
 
               <!-- Chart View -->
-              <div v-else-if="selectedView === 'chart'" class="h-64 bg-gray-50 rounded-md flex items-center justify-center">
-                <div class="text-center">
-                  <BarChart3 class="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p class="text-sm text-gray-600">차트 기능 개발 중</p>
+              <div v-else-if="selectedView === 'chart'">
+                <DataVisualization
+                  v-if="message.queryResult.data && message.queryResult.columns"
+                  :data="message.queryResult.data"
+                  :columns="message.queryResult.columns"
+                  :chart-type="selectedChartType"
+                />
+                <div v-else class="h-64 bg-gray-50 rounded-md flex items-center justify-center">
+                  <div class="text-center">
+                    <BarChart3 class="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p class="text-sm text-gray-600">데이터가 없습니다</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -187,7 +215,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, nextTick, watch } from 'vue';
 import MarkdownIt from 'markdown-it';
 import { 
   AlertCircle, 
@@ -197,6 +225,7 @@ import {
   MessageSquare,
   Code
 } from 'lucide-vue-next';
+import DataVisualization from './DataVisualization.vue';
 
 // 마크다운 파서 초기화
 const md = new MarkdownIt({
@@ -225,7 +254,26 @@ const emit = defineEmits<{
 }>();
 
 const selectedView = ref('table');
+const selectedChartType = ref<'bar' | 'line' | 'pie'>('bar');
 const displayLimit = ref(10);
+const isSaved = ref(false);
+
+// 차트를 그릴 수 있는 데이터인지 검사
+const isDataChartable = computed(() => {
+  const queryResult = props.message.queryResult;
+  if (!queryResult?.data || !queryResult?.columns) return false;
+  
+  // 최소 조건: 데이터가 있고, 컬럼이 2개 이상
+  if (queryResult.data.length === 0 || queryResult.columns.length < 2) return false;
+  
+  // 두 번째 컬럼이 숫자형 데이터인지 확인
+  const hasNumericData = queryResult.data.some((row: any) => {
+    const value = row[queryResult.columns[1]];
+    return typeof value === 'number' || (!isNaN(Number(value)) && value !== null && value !== '');
+  });
+  
+  return hasNumericData;
+});
 
 const displayData = computed(() => {
   if (!props.message.queryResult?.data) return [];
@@ -263,6 +311,14 @@ const saveQuery = () => {
       question: props.message.content,
       timestamp: props.message.timestamp
     });
+    
+    // 저장 상태 업데이트
+    isSaved.value = true;
+    
+    // 3초 후 상태 리셋
+    setTimeout(() => {
+      isSaved.value = false;
+    }, 3000);
   }
 };
 
@@ -289,6 +345,13 @@ const formatTime = (date: Date): string => {
     minute: '2-digit'
   });
 };
+
+// 차트를 그릴 수 없는 데이터에서 차트가 선택되면 자동으로 테이블로 변경
+watch([selectedView, isDataChartable], ([newView, chartable]) => {
+  if (newView === 'chart' && !chartable) {
+    selectedView.value = 'table';
+  }
+});
 </script>
 
 <style scoped>

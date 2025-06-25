@@ -36,7 +36,7 @@ class LangChainTextToSQLAgent:
         db_manager: Optional["DatabaseManager"] = None,
         enable_simulation: bool = True,
         model_temperature: float = 0.1,
-        max_iterations: int = 5,
+        max_iterations: int = 8,  # 5 -> 8로 증가
         verbose: bool = True
     ):
         """
@@ -86,22 +86,29 @@ class LangChainTextToSQLAgent:
         logger.info(f"✅ LangChain Tools 초기화 완료 - {len(self.tools)}개 도구")
         
         # System prompt 정의
-        self.system_prompt = """
-당신은 PostgreSQL Northwind 데이터베이스 전문가입니다. 
+        self.system_prompt = """당신은 PostgreSQL Northwind 데이터베이스 전문가입니다. 
 자연어 질문을 분석하여 적절한 SQL 쿼리를 생성하고 실행하여 정확한 답변을 제공합니다.
 
-🔒 중요한 보안 규칙:
+중요한 보안 규칙:
 - 이 시스템은 읽기 전용(READ-ONLY)입니다
 - SELECT 쿼리만 허용됩니다
 - INSERT, UPDATE, DELETE, DROP, ALTER 등의 데이터 변경 작업은 절대 금지됩니다
-- 데이터베이스의 구조나 데이터를 변경하려는 시도를 하지 마세요
 
 작업 순서:
 1. get_database_schema 도구로 데이터베이스 스키마를 확인
-2. generate_sql_from_question 도구로 SQL 쿼리 생성  
-3. execute_sql_query_sync 도구로 쿼리 실행
-4. 결과를 한국어로 명확하게 설명
-"""
+2. 질문을 분석하여 필요한 테이블과 컬럼 파악
+3. generate_sql_from_question 도구로 SQL 쿼리 생성
+4. execute_sql_query_sync 도구로 쿼리 실행
+5. 결과를 해석하여 사용자에게 친화적으로 응답
+
+질문 해석 가이드:
+- "고객별 구매량" = customers와 orders, order_details 테이블 조인
+- "최근" = order_date를 기준으로 정렬
+- "Top 5" = LIMIT 5 사용
+- "구매량" = quantity 컬럼 합계 (SUM)
+
+중요: 질문이 명확하지 않으면 너무 많은 시도를 하지 말고, 사용자에게 더 구체적인 질문을 요청하세요.
+패턴 매칭이 3번 실패하면 직접 SQL을 작성해보세요."""
         
         # Chat prompt 템플릿 생성
         prompt = ChatPromptTemplate.from_messages([

@@ -446,7 +446,7 @@ import ConnectionPanel from './ConnectionPanel.vue';
 import type { QueryResponse } from '@/types/api';
 
 const router = useRouter();
-const { user, logout: authLogout, fetchUserProfile, token } = useAuth();
+const { user, logout: authLogout, fetchUserProfile, token, api } = useAuth();
 const { loading } = useApi();
 const {
   currentSession,
@@ -739,10 +739,112 @@ const sendCurrentMessage = () => {
   }
 };
 
-const saveQuery = (queryData: any) => {
-  // TODO: Implement save query functionality
-  console.log('Saving query:', queryData);
+const saveQuery = async (queryData: any) => {
+  try {
+    // 서버에 쿼리 저장
+    const saveRequest = {
+      title: queryData.title || `Query - ${new Date().toLocaleString()}`,
+      question: queryData.question || '',
+      sql_query: queryData.sql_query || '',
+      query_results: queryData.query_results || null,
+      tags: queryData.tags || [],
+      notes: queryData.notes || ''
+    };
+
+    const response = await api.post('/api/v1/chat/queries/save', saveRequest);
+    
+    if (response.data) {
+      // 로컬 저장소에도 백업 (오프라인 접근용)
+      const savedQueries = JSON.parse(localStorage.getItem('savedQueries') || '[]');
+      savedQueries.unshift({
+        id: response.data.id,
+        ...saveRequest,
+        timestamp: new Date().toISOString(),
+        synced: true
+      });
+      
+      // 최대 100개까지만 로컬에 저장
+      if (savedQueries.length > 100) {
+        savedQueries.splice(100);
+      }
+      
+      localStorage.setItem('savedQueries', JSON.stringify(savedQueries));
+      
+      console.log('✅ 쿼리가 서버에 저장되었습니다:', response.data.id);
+      return true;
+    }
+    
+    return false;
+    
+  } catch (error: any) {
+    console.error('❌ 서버 저장 실패, 로컬에만 저장:', error);
+    
+    // 서버 저장 실패 시 로컬에만 저장
+    const savedQueries = JSON.parse(localStorage.getItem('savedQueries') || '[]');
+    
+    const localQuery = {
+      id: Date.now().toString(),
+      title: queryData.title || `Query - ${new Date().toLocaleString()}`,
+      question: queryData.question || '',
+      sql_query: queryData.sql_query || '',
+      query_results: queryData.query_results || null,
+      tags: queryData.tags || [],
+      notes: queryData.notes || '',
+      timestamp: new Date().toISOString(),
+      synced: false  // 서버 동기화되지 않음을 표시
+    };
+    
+    savedQueries.unshift(localQuery);
+    
+    if (savedQueries.length > 100) {
+      savedQueries.splice(100);
+    }
+    
+    localStorage.setItem('savedQueries', JSON.stringify(savedQueries));
+    
+    // 사용자에게 알림
+    if (error.response?.status === 401) {
+      alert('⚠️ 로그인이 필요합니다. 쿼리가 로컬에만 저장되었습니다.');
+    } else if (error.response?.status === 429) {
+      alert('⚠️ 요청이 너무 많습니다. 쿼리가 로컬에만 저장되었습니다.');
+    } else {
+      alert('⚠️ 서버 연결 오류로 쿼리가 로컬에만 저장되었습니다.');
+    }
+    
+    return true; // 로컬 저장은 성공
+  }
 };
+
+// 저장된 쿼리들을 확인하는 헬퍼 함수 (개발자 도구에서 사용 가능)
+const getSavedQueries = async () => {
+  try {
+    // 먼저 서버에서 저장된 쿼리들을 가져오기 시도
+    try {
+      const response = await api.get('/api/v1/chat/queries/saved');
+      if (response.data) {
+        console.log('� 서버에서 가져온 저장된 쿼리들:');
+        console.table(response.data);
+        return response.data;
+      }
+    } catch (serverError) {
+      console.warn('⚠️ 서버에서 쿼리를 가져올 수 없어 로컬 데이터를 사용합니다:', serverError);
+    }
+    
+    // 서버 조회 실패 시 로컬 저장소 사용
+    const savedQueries = JSON.parse(localStorage.getItem('savedQueries') || '[]');
+    console.log('💾 로컬에서 가져온 저장된 쿼리들:');
+    console.table(savedQueries);
+    return savedQueries;
+  } catch (error) {
+    console.error('저장된 쿼리 조회 중 오류:', error);
+    return [];
+  }
+};
+
+// 전역에서 접근할 수 있도록 window 객체에 추가
+if (typeof window !== 'undefined') {
+  (window as any).getSavedQueries = getSavedQueries;
+}
 
 const scrollToBottom = (force = false) => {
   if (messagesContainer.value && (shouldAutoScroll.value || force)) {

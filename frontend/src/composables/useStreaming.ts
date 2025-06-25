@@ -119,19 +119,69 @@ export function useStreaming() {
         onComplete(response.data);
       }
 
-    } catch (error) {
+    } catch (error: any) {
       state.value.isStreaming = false;
-      state.value.error = error instanceof Error ? error.message : 'Unknown error';
+      
+      // 세분화된 오류 처리
+      let errorMessage = 'Unknown error';
+      let userFriendlyMessage = '알 수 없는 오류가 발생했습니다.';
+      
+      if (error.response) {
+        const status = error.response.status;
+        const responseData = error.response.data;
+        
+        switch (status) {
+          case 429:
+            errorMessage = 'API rate limit exceeded';
+            userFriendlyMessage = '🚫 API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.';
+            break;
+          case 400:
+            errorMessage = responseData?.detail || 'Bad request';
+            userFriendlyMessage = `❌ 요청이 올바르지 않습니다: ${responseData?.detail || '입력을 확인해주세요.'}`;
+            break;
+          case 401:
+            errorMessage = 'Unauthorized';
+            userFriendlyMessage = '🔐 인증이 필요합니다. 다시 로그인해주세요.';
+            break;
+          case 403:
+            errorMessage = 'Forbidden';
+            userFriendlyMessage = '⛔ 권한이 없습니다. 관리자에게 문의하세요.';
+            break;
+          case 500:
+            errorMessage = 'Internal server error';
+            userFriendlyMessage = '🔧 서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+            break;
+          case 503:
+            errorMessage = 'Service unavailable';
+            userFriendlyMessage = '🚧 서비스가 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.';
+            break;
+          default:
+            errorMessage = `HTTP ${status}: ${responseData?.detail || 'Server error'}`;
+            userFriendlyMessage = `⚠️ 서버 오류 (${status}): ${responseData?.detail || '관리자에게 문의하세요.'}`;
+        }
+      } else if (error.request) {
+        errorMessage = 'Network error: No response received';
+        userFriendlyMessage = '🌐 네트워크 연결을 확인해주세요. 인터넷 연결이 불안정할 수 있습니다.';
+      } else {
+        errorMessage = error.message || 'Unknown error';
+        userFriendlyMessage = `❓ 오류가 발생했습니다: ${error.message || '관리자에게 문의하세요.'}`;
+      }
+      
+      state.value.error = userFriendlyMessage;
       
       const errorEvent: StreamEvent = {
         event: 'error',
-        data: { error: state.value.error },
+        data: { 
+          error: errorMessage,
+          userMessage: userFriendlyMessage,
+          statusCode: error.response?.status
+        },
         timestamp: new Date().toISOString()
       };
       state.value.events.push(errorEvent);
       
       if (onError) {
-        onError(state.value.error);
+        onError(userFriendlyMessage);
       }
     }
   };

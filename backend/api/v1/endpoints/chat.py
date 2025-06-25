@@ -24,6 +24,31 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+class QuerySaveRequest(BaseModel):
+    title: str = Field(..., description="Query title/name")
+    question: str = Field(..., description="Original question")
+    sql_query: str = Field(..., description="Generated SQL query")
+    query_results: Optional[List[Dict[str, Any]]] = Field(None, description="Query results")
+    tags: Optional[List[str]] = Field(default_factory=list, description="Tags for categorization")
+    notes: Optional[str] = Field(None, description="User notes")
+
+class QueryUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    tags: Optional[List[str]] = None
+    notes: Optional[str] = None
+
+class SavedQueryResponse(BaseModel):
+    id: str
+    title: str
+    question: str
+    sql_query: str
+    query_results: Optional[List[Dict[str, Any]]] = None
+    tags: List[str]
+    notes: Optional[str] = None
+    created_at: str
+    updated_at: str
+    user_id: str
+
 class ChatSessionCreate(BaseModel):
     title: Optional[str] = Field(None, description="Session title")
     database: str = Field(default="northwind", description="Target database")
@@ -884,3 +909,284 @@ async def get_chat_system_status(request: Request):
             'error': str(e),
             'status': 'error'
         }
+
+
+@router.post("/queries/save", response_model=SavedQueryResponse)
+async def save_query(
+    request: QuerySaveRequest,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    쿼리를 저장합니다.
+    """
+    try:
+        from database.connection_manager import get_db_manager
+        
+        db_manager = get_db_manager()
+        query_id = str(uuid.uuid4())
+        
+        # query_templates 테이블에 저장
+        save_query_sql = """
+            INSERT INTO query_templates (
+                id, user_id, name, description, sql_template, 
+                parameters, tags, created_at, updated_at,
+                question, query_results
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        
+        now = datetime.now(timezone.utc)
+        await db_manager.execute_query(
+            save_query_sql,
+            [
+                query_id,
+                current_user.id,
+                request.title,
+                request.notes or f"Saved query: {request.title}",
+                request.sql_query,
+                "{}",  # Empty parameters JSON
+                ",".join(request.tags) if request.tags else "",
+                now,
+                now,
+                request.question,
+                json.dumps(request.query_results) if request.query_results else None
+            ]
+        )
+        
+        logger.info(f"쿼리 저장 완료 - ID: {query_id}, 사용자: {current_user.email}")
+        
+        return SavedQueryResponse(
+            id=query_id,
+            title=request.title,
+            question=request.question,
+            sql_query=request.sql_query,
+            query_results=request.query_results,
+            tags=request.tags or [],
+            notes=request.notes,
+            created_at=now.isoformat(),
+            updated_at=now.isoformat(),
+            user_id=current_user.id
+        )
+        
+    except Exception as e:
+        logger.error(f"쿼리 저장 실패: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"쿼리 저장 실패: {str(e)}"
+        )
+
+
+@router.get("/queries/saved", response_model=List[SavedQueryResponse])
+async def get_saved_queries(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    tag: Optional[str] = Query(None, description="Filter by tag"),
+    search: Optional[str] = Query(None, description="Search in title or question"),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    사용자의 저장된 쿼리 목록을 조회합니다.
+    """
+    try:
+        from database.connection_manager import get_db_manager
+        
+        db_manager = get_db_manager()
+        
+        # 기본 쿼리
+        base_query = """
+            SELECT 
+                id, name as title, description, sql_template as sql_query,
+                tags, created_at, updated_at, question, query_results
+            FROM query_templates 
+            WHERE user_id = ?
+        """
+        params = [current_user.id]
+        
+        # 필터링 조건 추가
+        if tag:
+            base_query += " AND (tags LIKE ? OR tags LIKE ? OR tags LIKE ?)"
+            params.extend([f"{tag},%", f"%,{tag},%", f"%,{tag}"])
+        
+        if search:
+            base_query += " AND (name LIKE ? OR question LIKE ? OR description LIKE ?)"
+            search_term = f"%{search}%"
+            params.extend([search_term, search_term, search_term])
+        
+        base_query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        
+        results = await db_manager.execute_query(base_query, params)
+        
+        saved_queries = []
+        for row in results:
+            query_results = None
+            if row[8]:  # query_results column
+                try:
+                    query_results = json.loads(row[8])
+                except:
+                    query_results = None
+            
+            saved_queries.append(SavedQueryResponse(
+                id=row[0],
+                title=row[1],
+                question=row[7] or row[1],  # question or title as fallback
+                sql_query=row[3],
+                query_results=query_results,
+                tags=row[4].split(',') if row[4] else [],
+                notes=row[2],
+                created_at=row[5].isoformat() if hasattr(row[5], 'isoformat') else str(row[5]),
+                updated_at=row[6].isoformat() if hasattr(row[6], 'isoformat') else str(row[6]),
+                user_id=current_user.id
+            ))
+        
+        logger.info(f"저장된 쿼리 조회 완료 - 사용자: {current_user.email}, 결과: {len(saved_queries)}개")
+        return saved_queries
+        
+    except Exception as e:
+        logger.error(f"저장된 쿼리 조회 실패: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"저장된 쿼리 조회 실패: {str(e)}"
+        )
+
+
+@router.put("/queries/{query_id}", response_model=SavedQueryResponse)
+async def update_saved_query(
+    query_id: str,
+    request: QueryUpdateRequest,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    저장된 쿼리를 업데이트합니다.
+    """
+    try:
+        from database.connection_manager import get_db_manager
+        
+        db_manager = get_db_manager()
+        
+        # 기존 쿼리 확인
+        check_query = """
+            SELECT id, name, description, sql_template, tags, question, query_results
+            FROM query_templates 
+            WHERE id = ? AND user_id = ?
+        """
+        existing = await db_manager.execute_query(check_query, [query_id, current_user.id])
+        
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="저장된 쿼리를 찾을 수 없습니다."
+            )
+        
+        existing_row = existing[0]
+        
+        # 업데이트할 필드들
+        update_fields = []
+        params = []
+        
+        if request.title is not None:
+            update_fields.append("name = ?")
+            params.append(request.title)
+        
+        if request.notes is not None:
+            update_fields.append("description = ?")
+            params.append(request.notes)
+        
+        if request.tags is not None:
+            update_fields.append("tags = ?")
+            params.append(",".join(request.tags))
+        
+        if update_fields:
+            update_fields.append("updated_at = ?")
+            params.append(datetime.now(timezone.utc))
+            params.append(query_id)
+            params.append(current_user.id)
+            
+            update_query = f"""
+                UPDATE query_templates 
+                SET {', '.join(update_fields)}
+                WHERE id = ? AND user_id = ?
+            """
+            
+            await db_manager.execute_query(update_query, params)
+        
+        # 업데이트된 데이터 반환
+        updated = await db_manager.execute_query(check_query, [query_id, current_user.id])
+        updated_row = updated[0]
+        
+        query_results = None
+        if updated_row[6]:
+            try:
+                query_results = json.loads(updated_row[6])
+            except:
+                query_results = None
+        
+        logger.info(f"쿼리 업데이트 완료 - ID: {query_id}, 사용자: {current_user.email}")
+        
+        return SavedQueryResponse(
+            id=updated_row[0],
+            title=updated_row[1],
+            question=updated_row[5] or updated_row[1],
+            sql_query=updated_row[3],
+            query_results=query_results,
+            tags=updated_row[4].split(',') if updated_row[4] else [],
+            notes=updated_row[2],
+            created_at=existing_row[5] if hasattr(existing_row[5], 'isoformat') else str(existing_row[5]),
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            user_id=current_user.id
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"쿼리 업데이트 실패: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"쿼리 업데이트 실패: {str(e)}"
+        )
+
+
+@router.delete("/queries/{query_id}")
+async def delete_saved_query(
+    query_id: str,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    저장된 쿼리를 삭제합니다.
+    """
+    try:
+        from database.connection_manager import get_db_manager
+        
+        db_manager = get_db_manager()
+        
+        # 쿼리 존재 확인
+        check_query = """
+            SELECT id FROM query_templates 
+            WHERE id = ? AND user_id = ?
+        """
+        existing = await db_manager.execute_query(check_query, [query_id, current_user.id])
+        
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="저장된 쿼리를 찾을 수 없습니다."
+            )
+        
+        # 삭제 실행
+        delete_query = """
+            DELETE FROM query_templates 
+            WHERE id = ? AND user_id = ?
+        """
+        await db_manager.execute_query(delete_query, [query_id, current_user.id])
+        
+        logger.info(f"쿼리 삭제 완료 - ID: {query_id}, 사용자: {current_user.email}")
+        
+        return {"message": "쿼리가 성공적으로 삭제되었습니다."}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"쿼리 삭제 실패: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"쿼리 삭제 실패: {str(e)}"
+        )
