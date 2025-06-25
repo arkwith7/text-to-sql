@@ -68,6 +68,7 @@ graph LR
 ### 🎯 **핵심 처리 엔진**
 
 #### **LangChain Text-to-SQL 에이전트** (`core/agents/langchain_agent.py`)
+
 쿼리 전체 생명주기를 처리하는 주요 오케스트레이터입니다. 단순히 SQL을 생성하는 것이 아니라 정보 수집, 계획 수립, 실행의 논리적 프로세스를 따릅니다.
 
 **핵심 역할:**
@@ -97,6 +98,7 @@ agent = create_openai_functions_agent(
 에이전트의 힘은 전문화된 도구들에서 나옵니다:
 
 #### **스키마 분석기 도구** (`core/tools/schema_analyzer_tool.py`)
+
 비즈니스 컨텍스트와 함께 실시간 데이터베이스 스키마 정보를 제공합니다.
 
 **특징:**
@@ -108,6 +110,7 @@ agent = create_openai_functions_agent(
 - 데모용 Northwind 스키마 완전 구현 (8개 테이블)
 
 #### **SQL 실행 도구** (`core/tools/sql_execution_tool.py`)
+
 포괄적인 안전 조치와 함께 안전한 SQL 실행을 처리합니다.
 
 **보안 기능:**
@@ -152,24 +155,28 @@ agent = create_openai_functions_agent(
 ### 🎨 **동적 프론트엔드 (Vue.js 3)**
 
 #### **대화형 인터페이스** (`ChatInterface.vue`)
+
 - 자연스러운 소통을 위한 채팅 스타일 상호작용
 - 즉각적인 피드백을 위한 실시간 쿼리 스트리밍
 - 구문 강조가 포함된 리치 메시지 포맷팅 (Markdown 지원)
 - 대화형 데이터 테이블 및 차트
 
 #### **데이터 시각화** (`DataVisualization.vue`)
+
 - 데이터 기반 자동 차트 유형 선택 (Chart.js 사용)
 - 드릴다운 기능이 있는 대화형 차트
 - 보고서를 위한 내보내기 기능
 - 모바일 장치를 위한 반응형 설계
 
 #### **데이터베이스 관리** (`DatabaseInfo.vue`)
+
 - 쉬운 설정을 위한 연결 마법사
 - 검색 기능이 있는 스키마 브라우저
 - 쿼리 히스토리 및 즐겨찾기
 - 팀 사용을 위한 협업 기능
 
 #### **사용자 프로필** (`UserProfile.vue`)
+
 - 토큰 사용량 통계 및 비용 추적
 - 개인화된 대시보드
 - 사용자 환경 설정 관리
@@ -179,9 +186,11 @@ agent = create_openai_functions_agent(
 ## 🗄️ **데이터베이스 아키텍처**
 
 ### **이중 데이터베이스 설계**
+
 시스템은 두 개의 전문화된 데이터베이스로 동작합니다:
 
 #### **1. 애플리케이션 데이터베이스 (SQLite)** - `app_data.db`
+
 사용자 및 시스템 데이터를 관리합니다:
 
 - **사용자 관리**: `users`, `refresh_tokens`, `api_keys`
@@ -192,6 +201,7 @@ agent = create_openai_functions_agent(
 - **시스템 구성**: `system_config`, `alembic_version`
 
 #### **2. 비즈니스 데이터베이스 (다중 DB 지원)**
+
 비즈니스 데이터 분석을 위한 분석 대상 데이터베이스:
 
 - **지원 데이터베이스**: PostgreSQL, Oracle, Microsoft SQL Server, MySQL, MariaDB 등
@@ -200,6 +210,7 @@ agent = create_openai_functions_agent(
 - **실시간 비즈니스 분석**: 매출, 고객, 제품 분석
 
 ### **연결 관리**
+
 - **다중 데이터베이스 타입 지원**: PostgreSQL, Oracle, Microsoft SQL Server, MySQL, MariaDB 등
 - 암호화를 통한 안전한 자격 증명 저장
 - 연결 풀링 및 최적화
@@ -210,6 +221,7 @@ agent = create_openai_functions_agent(
 ## 🛠️ **기술 스택**
 
 ### **백엔드 기술**
+
 - **FastAPI**: 고성능 Python 웹 프레임워크
 - **SQLAlchemy**: 데이터베이스 작업을 위한 ORM
 - **Alembic**: 데이터베이스 마이그레이션 및 버전 관리
@@ -217,12 +229,14 @@ agent = create_openai_functions_agent(
 - **Redis**: 캐싱 및 세션 저장소
 
 ### **AI 및 ML**
+
 - **Azure OpenAI**: SQL 생성을 위한 GPT-4o-mini
 - **LangChain**: 에이전트 프레임워크 및 도구 오케스트레이션
 - **커스텀 Function Tools**: @tool 데코레이터 기반 구현
 - **맞춤형 프롬프트 엔지니어링**: 도메인별 최적화
 
 ### **프론트엔드 기술**
+
 - **Vue.js 3**: 진보적 JavaScript 프레임워크
 - **TypeScript**: 타입 안전 JavaScript 개발
 - **Tailwind CSS**: 유틸리티 우선 CSS 프레임워크
@@ -230,6 +244,7 @@ agent = create_openai_functions_agent(
 - **Vite**: 빠른 빌드 도구 및 개발 서버
 
 ### **인프라**
+
 - **Docker**: 컨테이너화 및 배포
 - **분석 대상 데이터베이스**: PostgreSQL, Oracle, SQL Server, MySQL, MariaDB 등
 - **SQLite**: 애플리케이션 데이터베이스
@@ -240,6 +255,7 @@ agent = create_openai_functions_agent(
 ## 🔄 **요청 처리 흐름**
 
 ### **1. 사용자 입력 처리**
+
 ```typescript
 // 프론트엔드 쿼리 제출
 const response = await streamQuery(userQuestion, {
@@ -249,12 +265,14 @@ const response = await streamQuery(userQuestion, {
 ```
 
 ### **2. 인증 및 검증**
+
 - JWT 토큰 검증 (`AuthService`)
 - 속도 제한 검사
 - 입력 무결성 검사
 - 연결 권한 확인
 
 ### **3. 스키마 분석**
+
 ```python
 # 실시간 스키마 조회 (다중 DB 지원)
 schema_info = get_database_schema("target_database")
@@ -262,6 +280,7 @@ schema_info = get_database_schema("target_database")
 ```
 
 ### **4. AI 기반 SQL 생성**
+
 ```python
 # LangChain 에이전트 실행
 result = langchain_agent.invoke({
@@ -271,6 +290,7 @@ result = langchain_agent.invoke({
 ```
 
 ### **5. 쿼리 실행 및 안전성**
+
 ```python
 # 타임아웃을 포함한 안전한 SQL 실행
 result = execute_sql_query_sync(
@@ -279,12 +299,14 @@ result = execute_sql_query_sync(
 ```
 
 ### **6. 결과 처리**
+
 - 데이터 포맷팅 및 타입 변환
 - 시각화 추천 (`chart_type` 결정)
 - 자연어 설명 생성
 - 성능을 위한 캐싱 (Redis)
 
 ### **7. 응답 전달**
+
 토큰 사용량, 비용 추적을 포함한 완전한 응답을 제공합니다.
 
 ---
@@ -292,12 +314,14 @@ result = execute_sql_query_sync(
 ## 🔐 **보안 및 인증**
 
 ### **JWT 기반 인증**
+
 - 안전한 토큰 기반 인증
 - 리프레시 토큰 순환 (`refresh_tokens`)
 - 역할 기반 액세스 제어 (RBAC)
 - 프로그래매틱 액세스를 위한 API 키 지원 (`api_keys`)
 
 ### **SQL 보안**
+
 - 인젝션 방지를 위한 준비된 문
 - 쿼리 복잡성 분석
 - 화이트리스트 기반 테이블 액세스
@@ -308,6 +332,7 @@ result = execute_sql_query_sync(
 ## 📈 **분석 및 모니터링**
 
 ### **쿼리 분석** (`query_analytics`)
+
 - 성능 메트릭 및 타이밍
 - 성공/실패율
 - 일반적인 쿼리 패턴
@@ -316,6 +341,7 @@ result = execute_sql_query_sync(
 - **모델별 사용 통계** (GPT-4o-mini)
 
 ### **시스템 메트릭** (`performance_metrics`)
+
 - 응답 시간 및 처리량
 - 데이터베이스 연결 상태
 - 캐시 적중률 (Redis)
@@ -326,6 +352,7 @@ result = execute_sql_query_sync(
 ## 🚀 **배포 및 운영**
 
 ### **컨테이너화된 배포**
+
 ```yaml
 # Docker Compose 구성
 services:
@@ -356,6 +383,7 @@ services:
 ```
 
 ### **모니터링 및 관측성**
+
 - 애플리케이션 성능 모니터링 (APM)
 - 비즈니스 메트릭용 커스텀 대시보드
 - 시스템 상태를 위한 알림 시스템
@@ -366,18 +394,21 @@ services:
 ## 📊 **성능 특성**
 
 ### **응답 시간**
+
 - 스키마 조회: < 100ms (캐시됨)
 - SQL 생성: 1-3초
 - 쿼리 실행: 복잡성에 따라 가변
 - 총 응답: 일반적으로 < 5초
 
 ### **확장성**
+
 - 동시 사용자 지원: 100+ 사용자
 - 데이터베이스 연결: 풀링 및 최적화
 - 캐싱 전략: 다층 (Redis + 인메모리)
 - 수평 확장: 상태 비저장 설계
 
 ### **정확성 메트릭**
+
 - SQL 정확성: 일반적인 쿼리에 대해 >95%
 - 스키마 이해: >98% 정확도
 - 비즈니스 로직 준수: >90% 정확도
@@ -388,18 +419,21 @@ services:
 ## 🎯 **향후 개선사항**
 
 ### **계획된 기능**
+
 - 다국어 지원 (한국어, 영어, 일본어)
 - 고급 시각화 유형 (지리공간, 타임라인)
 - 기계 학습 모델 통합
 - 실시간 데이터 스트리밍 지원
 
 ### **기술적 개선사항**
+
 - 유연한 데이터 가져오기를 위한 GraphQL API
 - 실시간 협업을 위한 WebSocket 지원
 - 고급 캐싱 전략
 - 쿼리 컴파일을 사용한 성능 최적화
 
 ### **비즈니스 기능**
+
 - 자동화된 보고서 생성
 - 예약된 쿼리 및 알림
 - 데이터 거버넌스 및 계보 추적
