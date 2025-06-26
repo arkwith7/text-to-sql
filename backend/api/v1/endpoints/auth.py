@@ -30,6 +30,9 @@ class AuthStatsResponse(BaseModel):
     recent_logins: int
     user_registrations_today: int
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
 @router.post("/register", response_model=TokenResponse)
 async def register(
     user_data: UserCreate,
@@ -283,4 +286,28 @@ async def get_user_daily_model_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get daily model statistics: {str(e)}"
+        )
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    refresh_data: RefreshTokenRequest,
+    request: Request
+):
+    """Refresh access token using refresh token."""
+    auth_service: AuthService = request.app.state.auth_service
+    
+    try:
+        # Refresh access token
+        token_response = await auth_service.refresh_access_token(refresh_data.refresh_token)
+        return token_response
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token refresh failed"
         )

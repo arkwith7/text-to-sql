@@ -921,6 +921,284 @@ class AuthService:
         
         return user
 
+    async def get_all_users(
+        self, 
+        limit: int = 100, 
+        offset: int = 0, 
+        search_query: Optional[str] = None,
+        role_filter: Optional[str] = None,
+        is_active_filter: Optional[bool] = None
+    ) -> List[Dict[str, Any]]:
+        """Get all users with pagination and optional search and filters."""
+        try:
+            # Base query
+            base_query = """
+                SELECT id, email, full_name, company, role, is_active, 
+                       created_at, updated_at, last_login
+                FROM users
+            """
+            
+            # Build WHERE conditions
+            conditions = []
+            params = {
+                "limit": limit,
+                "offset": offset
+            }
+            
+            if search_query:
+                conditions.append("(email ILIKE :search OR full_name ILIKE :search OR company ILIKE :search)")
+                params["search"] = f"%{search_query}%"
+            
+            if role_filter:
+                conditions.append("role = :role")
+                params["role"] = role_filter
+            
+            if is_active_filter is not None:
+                conditions.append("is_active = :is_active")
+                params["is_active"] = is_active_filter
+            
+            # Build final query
+            if conditions:
+                query = f"""
+                    {base_query}
+                    WHERE {' AND '.join(conditions)}
+                    ORDER BY created_at DESC
+                    LIMIT :limit OFFSET :offset
+                """
+            else:
+                query = f"""
+                    {base_query}
+                    ORDER BY created_at DESC
+                    LIMIT :limit OFFSET :offset
+                """
+            
+            result = await self.db_manager.execute_query("app", query, params)
+            
+            if result.get("success") and result.get("data"):
+                users = []
+                for row in result["data"]:
+                    user_dict = dict(row)
+                    # Convert datetime objects to strings if needed
+                    if user_dict.get('created_at'):
+                        user_dict['created_at'] = user_dict['created_at'].isoformat() if hasattr(user_dict['created_at'], 'isoformat') else str(user_dict['created_at'])
+                    if user_dict.get('updated_at'):
+                        user_dict['updated_at'] = user_dict['updated_at'].isoformat() if hasattr(user_dict['updated_at'], 'isoformat') else str(user_dict['updated_at'])
+                    if user_dict.get('last_login'):
+                        user_dict['last_login'] = user_dict['last_login'].isoformat() if hasattr(user_dict['last_login'], 'isoformat') else str(user_dict['last_login'])
+                    users.append(user_dict)
+                
+                self.logger.info(f"📋 사용자 목록 조회 완료 - 총 {len(users)}명")
+                return users
+            else:
+                return []
+                    
+        except Exception as e:
+            self.logger.error(f"❌ 사용자 목록 조회 실패: {str(e)}")
+            raise
+
+    async def get_users_count(
+        self, 
+        search_query: Optional[str] = None,
+        role_filter: Optional[str] = None,
+        is_active_filter: Optional[bool] = None
+    ) -> int:
+        """Get total count of users (for pagination)."""
+        try:
+            base_query = "SELECT COUNT(*) as total FROM users"
+            
+            # Build WHERE conditions
+            conditions = []
+            params = {}
+            
+            if search_query:
+                conditions.append("(email ILIKE :search OR full_name ILIKE :search OR company ILIKE :search)")
+                params["search"] = f"%{search_query}%"
+            
+            if role_filter:
+                conditions.append("role = :role")
+                params["role"] = role_filter
+            
+            if is_active_filter is not None:
+                conditions.append("is_active = :is_active")
+                params["is_active"] = is_active_filter
+            
+            # Build final query
+            if conditions:
+                query = f"{base_query} WHERE {' AND '.join(conditions)}"
+            else:
+                query = base_query
+            
+            result = await self.db_manager.execute_query("app", query, params)
+            
+            if result.get("success") and result.get("data"):
+                return result["data"][0]["total"]
+            return 0
+                    
+        except Exception as e:
+            self.logger.error(f"❌ 사용자 수 조회 실패: {str(e)}")
+            raise
+
+    async def update_user_role(self, user_id: str, new_role: str) -> bool:
+        """Update user role."""
+        try:
+            # Validate role
+            if new_role not in [role.value for role in UserRole]:
+                raise ValueError(f"Invalid role: {new_role}")
+            
+            query = """
+                UPDATE users 
+                SET role = :new_role, updated_at = :updated_at 
+                WHERE id = :user_id
+            """
+            
+            params = {
+                "new_role": new_role,
+                "updated_at": datetime.now(timezone.utc),
+                "user_id": user_id
+            }
+            
+            result = await self.db_manager.execute_query("app", query, params)
+            
+            if result.get("success"):
+                self.logger.info(f"✅ 사용자 역할 변경 완료 - User ID: {user_id}, New Role: {new_role}")
+                return True
+            else:
+                raise ValueError(f"User with ID {user_id} not found")
+                    
+        except Exception as e:
+            self.logger.error(f"❌ 사용자 역할 변경 실패: {str(e)}")
+            raise
+
+    async def update_user_status(self, user_id: str, is_active: bool) -> bool:
+        """Update user active status."""
+        try:
+            query = """
+                UPDATE users 
+                SET is_active = :is_active, updated_at = :updated_at 
+                WHERE id = :user_id
+            """
+            
+            params = {
+                "is_active": is_active,
+                "updated_at": datetime.now(timezone.utc),
+                "user_id": user_id
+            }
+            
+            result = await self.db_manager.execute_query("app", query, params)
+            
+            if result.get("success"):
+                status_text = "활성화" if is_active else "비활성화"
+                self.logger.info(f"✅ 사용자 상태 변경 완료 - User ID: {user_id}, Status: {status_text}")
+                return True
+            else:
+                raise ValueError(f"User with ID {user_id} not found")
+                    
+        except Exception as e:
+            self.logger.error(f"❌ 사용자 상태 변경 실패: {str(e)}")
+            raise
+
+    async def update_user(self, user_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update user information."""
+        try:
+            # 현재 사용자 정보 조회
+            current_user = await self.get_user_by_id(user_id)
+            if not current_user:
+                raise ValueError(f"User with ID {user_id} not found")
+            
+            # 업데이트할 필드들
+            allowed_fields = ['full_name', 'company', 'role', 'is_active']
+            update_fields = []
+            params = {"user_id": user_id, "updated_at": datetime.now(timezone.utc)}
+            
+            for field, value in update_data.items():
+                if field in allowed_fields and value is not None:
+                    update_fields.append(f"{field} = :{field}")
+                    params[field] = value
+            
+            if not update_fields:
+                raise ValueError("No valid fields to update")
+            
+            # 이메일 중복 체크 (이메일이 업데이트되는 경우)
+            if 'email' in update_data and update_data['email'] != current_user['email']:
+                existing_user = await self.get_user_by_email(update_data['email'])
+                if existing_user and existing_user['id'] != user_id:
+                    raise ValueError("User with this email already exists")
+                update_fields.append("email = :email")
+                params['email'] = update_data['email']
+            
+            # 비밀번호 업데이트 (제공된 경우)
+            if 'password' in update_data and update_data['password']:
+                self._validate_password_strength(update_data['password'])
+                hashed_password = self.hash_password(update_data['password'])
+                update_fields.append("password_hash = :password_hash")
+                params['password_hash'] = hashed_password
+            
+            # 역할 유효성 검사
+            if 'role' in update_data:
+                if update_data['role'] not in [role.value for role in UserRole]:
+                    raise ValueError(f"Invalid role: {update_data['role']}")
+            
+            query = f"""
+                UPDATE users 
+                SET {', '.join(update_fields)}, updated_at = :updated_at
+                WHERE id = :user_id
+            """
+            
+            result = await self.db_manager.execute_query("app", query, params)
+            
+            if not result.get("success"):
+                raise ValueError("Failed to update user")
+            
+            # 업데이트된 사용자 정보 반환
+            updated_user = await self.get_user_by_id(user_id)
+            if updated_user:
+                # Convert datetime objects to strings if needed
+                if updated_user.get('created_at'):
+                    updated_user['created_at'] = updated_user['created_at'].isoformat() if hasattr(updated_user['created_at'], 'isoformat') else str(updated_user['created_at'])
+                if updated_user.get('updated_at'):
+                    updated_user['updated_at'] = updated_user['updated_at'].isoformat() if hasattr(updated_user['updated_at'], 'isoformat') else str(updated_user['updated_at'])
+                if updated_user.get('last_login'):
+                    updated_user['last_login'] = updated_user['last_login'].isoformat() if hasattr(updated_user['last_login'], 'isoformat') else str(updated_user['last_login'])
+            
+            self.logger.info(f"✅ 사용자 정보 업데이트 완료 - User ID: {user_id}")
+            return updated_user
+                    
+        except Exception as e:
+            self.logger.error(f"❌ 사용자 정보 업데이트 실패: {str(e)}")
+            raise
+
+    async def delete_user(self, user_id: str) -> bool:
+        """Delete user (soft delete by setting is_active to False)."""
+        try:
+            # 현재 사용자 확인
+            user = await self.get_user_by_id(user_id)
+            if not user:
+                raise ValueError(f"User with ID {user_id} not found")
+            
+            # Soft delete - 사용자를 비활성화
+            query = """
+                UPDATE users 
+                SET is_active = FALSE, updated_at = :updated_at 
+                WHERE id = :user_id
+            """
+            
+            params = {
+                "updated_at": datetime.now(timezone.utc),
+                "user_id": user_id
+            }
+            
+            result = await self.db_manager.execute_query("app", query, params)
+            
+            if result.get("success"):
+                self.logger.info(f"✅ 사용자 삭제 완료 - User ID: {user_id}, Email: {user['email']}")
+                return True
+            else:
+                raise ValueError("Failed to delete user")
+                    
+        except Exception as e:
+            self.logger.error(f"❌ 사용자 삭제 실패: {str(e)}")
+            raise
+
 # Permission checking decorators
 def require_role(required_role: UserRole):
     """Decorator to require a specific role or higher."""

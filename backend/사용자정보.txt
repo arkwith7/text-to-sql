@@ -1,0 +1,2 @@
+admin@example.com / admin123
+demo@example.com / demo1234

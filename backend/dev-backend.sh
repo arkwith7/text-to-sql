@@ -107,7 +107,7 @@ else
 fi
 
 # Set environment variables for development
-export APP_DATABASE_URL="sqlite+aiosqlite:///${SQLITE_DB_PATH}"
+# export APP_DATABASE_URL="sqlite+aiosqlite:///${SQLITE_DB_PATH}"  # .env의 값을 우선 사용하도록 주석 처리
 export REDIS_URL="redis://localhost:${REDIS_DEV_PORT}"
 
 # Set default values for missing environment variables

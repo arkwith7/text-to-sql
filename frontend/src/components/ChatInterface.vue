@@ -46,80 +46,224 @@
       <!-- Navigation -->
       <nav class="flex-1 p-4">
         <div class="space-y-2">
-          <button
-            @click="activeTab = 'chat'"
-            :class="[
-              'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
-              activeTab === 'chat' 
-                ? 'bg-blue-100 text-blue-700' 
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
-              isCollapsed ? 'justify-center' : ''
-            ]"
-            :title="isCollapsed ? '채팅' : ''"
-          >
-            <MessageCircle class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
-            <span v-if="!isCollapsed">채팅</span>
-          </button>
-          
-          <button
-            @click="activeTab = 'history'"
-            :class="[
-              'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
-              activeTab === 'history' 
-                ? 'bg-blue-100 text-blue-700' 
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
-              isCollapsed ? 'justify-center' : ''
-            ]"
-            :title="isCollapsed ? '대화 기록' : ''"
-          >
-            <Clock class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
-            <span v-if="!isCollapsed">대화 기록</span>
-          </button>
-          
-          <button
-            @click="activeTab = 'saved'"
-            :class="[
-              'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
-              activeTab === 'saved' 
-                ? 'bg-blue-100 text-blue-700' 
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
-              isCollapsed ? 'justify-center' : ''
-            ]"
-            :title="isCollapsed ? '저장된 쿼리' : ''"
-          >
-            <Bookmark class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
-            <span v-if="!isCollapsed">저장된 쿼리</span>
-          </button>
+          <!-- Admin Menu Section - Only show for admin users -->
+          <div v-if="user?.role === 'admin'">
+            <!-- Admin Menu Header (Collapsible) -->
+            <div v-if="!isCollapsed" class="flex items-center justify-between">
+              <div class="px-3 py-1 text-xs font-semibold text-red-600 uppercase tracking-wider">
+                관리자 메뉴
+              </div>
+              <button
+                @click="isAdminMenuExpanded = !isAdminMenuExpanded"
+                class="p-1 rounded hover:bg-gray-100 transition-colors"
+                :title="isAdminMenuExpanded ? '접기' : '펼치기'"
+              >
+                <svg class="w-4 h-4 text-gray-500 transition-transform" :class="isAdminMenuExpanded ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
+            </div>
 
-          <button
-            @click="activeTab = 'database'"
-            :class="[
-              'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
-              activeTab === 'database' 
-                ? 'bg-blue-100 text-blue-700' 
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
-              isCollapsed ? 'justify-center' : ''
-            ]"
-            :title="isCollapsed ? '분석 데이터 정보' : ''"
-          >
-            <Database class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
-            <span v-if="!isCollapsed">분석 데이터 정보</span>
-          </button>
+            <!-- Admin Menu Items -->
+            <div :class="!isCollapsed ? (isAdminMenuExpanded ? 'block' : 'hidden') : 'block'" class="space-y-1">
+              <button
+                @click="activeTab = 'admin-dashboard'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'admin-dashboard'
+                    ? 'bg-red-100 text-red-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? '관리자 대시보드' : ''"
+              >
+                <svg class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
+                </svg>
+                <span v-if="!isCollapsed">대시보드</span>
+              </button>
 
-          <button
-            @click="activeTab = 'profile'"
-            :class="[
-              'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
-              activeTab === 'profile' 
-                ? 'bg-blue-100 text-blue-700' 
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
-              isCollapsed ? 'justify-center' : ''
-            ]"
-            :title="isCollapsed ? '프로필' : ''"
-          >
-            <User class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
-            <span v-if="!isCollapsed">프로필</span>
-          </button>
+              <button
+                @click="activeTab = 'admin-users'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'admin-users'
+                    ? 'bg-red-100 text-red-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? '사용자 관리' : ''"
+              >
+                <svg class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+                </svg>
+                <span v-if="!isCollapsed">사용자 관리</span>
+              </button>
+
+              <button
+                @click="activeTab = 'admin-prompts'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'admin-prompts'
+                    ? 'bg-red-100 text-red-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? '시스템 프롬프트 관리' : ''"
+              >
+                <svg class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H6.414l2.293 2.293a1 1 0 11-1.414 1.414L5 6.414V8a1 1 0 01-2 0V4zm9 1a1 1 0 010-2h4a1 1 0 011 1v4a1 1 0 01-2 0V6.414l-2.293 2.293a1 1 0 11-1.414-1.414L13.586 5H12zm-9 7a1 1 0 012 0v1.586l2.293-2.293a1 1 0 111.414 1.414L6.414 15H8a1 1 0 010 2H4a1 1 0 01-1-1v-4zm13-1a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 010-2h1.586l-2.293-2.293a1 1 0 111.414-1.414L15 13.586V12a1 1 0 011-1z" clip-rule="evenodd"/>
+                </svg>
+                <span v-if="!isCollapsed">시스템 프롬프트</span>
+              </button>
+
+              <button
+                @click="activeTab = 'admin-db-connections'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'admin-db-connections'
+                    ? 'bg-red-100 text-red-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? 'DB 연결 관리' : ''"
+              >
+                <Database class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
+                <span v-if="!isCollapsed">DB 연결 관리</span>
+              </button>
+
+              <button
+                @click="activeTab = 'admin-schema-metadata'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'admin-schema-metadata'
+                    ? 'bg-red-100 text-red-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? '스키마 메타데이터 관리' : ''"
+              >
+                <svg class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
+                </svg>
+                <span v-if="!isCollapsed">스키마 메타데이터</span>
+              </button>
+
+              <button
+                @click="activeTab = 'admin-llm-connections'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'admin-llm-connections'
+                    ? 'bg-red-100 text-red-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? 'LLM 연결 관리' : ''"
+              >
+                <svg class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+                <span v-if="!isCollapsed">LLM 연결 관리</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- User Menu Section -->
+          <div class="space-y-2" :class="user?.role === 'admin' ? 'border-t border-gray-200 mt-4 pt-4' : ''">
+            <!-- User Menu Header (Collapsible) -->
+            <div v-if="!isCollapsed && user?.role === 'admin'" class="flex items-center justify-between">
+              <div class="px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                사용자 메뉴
+              </div>
+              <button
+                @click="isUserMenuExpanded = !isUserMenuExpanded"
+                class="p-1 rounded hover:bg-gray-100 transition-colors"
+                :title="isUserMenuExpanded ? '접기' : '펼치기'"
+              >
+                <svg class="w-4 h-4 text-gray-500 transition-transform" :class="isUserMenuExpanded ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- User Menu Items -->
+            <div :class="user?.role === 'admin' && !isCollapsed ? (isUserMenuExpanded ? 'block' : 'hidden') : 'block'">
+              <button
+                @click="activeTab = 'chat'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'chat' 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? '채팅' : ''"
+              >
+                <MessageCircle class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
+                <span v-if="!isCollapsed">채팅</span>
+              </button>
+              
+              <button
+                @click="activeTab = 'history'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'history' 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? '대화 기록' : ''"
+              >
+                <Clock class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
+                <span v-if="!isCollapsed">대화 기록</span>
+              </button>
+              
+              <button
+                @click="activeTab = 'saved'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'saved' 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? '저장된 쿼리' : ''"
+              >
+                <Bookmark class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
+                <span v-if="!isCollapsed">저장된 쿼리</span>
+              </button>
+
+              <button
+                @click="activeTab = 'database'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'database' 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? '분석 데이터 정보' : ''"
+              >
+                <Database class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
+                <span v-if="!isCollapsed">분석 데이터 정보</span>
+              </button>
+
+              <button
+                @click="activeTab = 'profile'"
+                :class="[
+                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  activeTab === 'profile' 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                  isCollapsed ? 'justify-center' : ''
+                ]"
+                :title="isCollapsed ? '프로필' : ''"
+              >
+                <User class="w-4 h-4" :class="isCollapsed ? '' : 'mr-3'" />
+                <span v-if="!isCollapsed">프로필</span>
+              </button>
+            </div>
+          </div>
         </div>
       </nav>
 
@@ -189,11 +333,7 @@
       <header class="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
         <div class="flex items-center justify-between">
           <h2 class="text-xl font-semibold text-gray-900">
-            {{ activeTab === 'chat' ? '새로운 질문' : 
-               activeTab === 'history' ? '대화 기록' : 
-               activeTab === 'saved' ? '저장된 쿼리' : 
-               activeTab === 'database' ? '분석 데이터 정보' :
-               activeTab === 'profile' ? '사용자 프로필' : '새로운 질문' }}
+            {{ getTabTitle() }}
           </h2>
           
           <div class="flex items-center space-x-4">
@@ -395,6 +535,36 @@
       <div v-else-if="activeTab === 'profile'" class="flex-1 p-6 overflow-y-auto">
         <UserProfile />
       </div>
+
+      <!-- Admin Dashboard Tab -->
+      <div v-else-if="activeTab === 'admin-dashboard'" class="flex-1 p-6 overflow-y-auto">
+        <AdminDashboard @navigate-to="handleAdminNavigation" />
+      </div>
+
+      <!-- Admin Users Tab -->
+      <div v-else-if="activeTab === 'admin-users'" class="flex-1 p-6 overflow-y-auto">
+        <AdminUsers />
+      </div>
+
+      <!-- Admin System Prompts Tab -->
+      <div v-else-if="activeTab === 'admin-prompts'" class="flex-1 p-6 overflow-y-auto">
+        <AdminSystemPrompts />
+      </div>
+
+      <!-- Admin DB Connections Tab -->
+      <div v-else-if="activeTab === 'admin-db-connections'" class="flex-1 p-6 overflow-y-auto">
+        <AdminDbConnections />
+      </div>
+
+      <!-- Admin Schema Metadata Tab -->
+      <div v-else-if="activeTab === 'admin-schema-metadata'" class="flex-1 p-6 overflow-y-auto">
+        <AdminSchemaMetadata />
+      </div>
+
+      <!-- Admin LLM Connections Tab -->
+      <div v-else-if="activeTab === 'admin-llm-connections'" class="flex-1 p-6 overflow-y-auto">
+        <AdminLlmConnections />
+      </div>
     </div>
 
     <!-- Streaming Progress Modal -->
@@ -443,6 +613,12 @@ import UserProfile from './UserProfile.vue';
 import DatabaseInfo from './DatabaseInfo.vue';
 import StreamingProgress from './StreamingProgress.vue';
 import ConnectionPanel from './ConnectionPanel.vue';
+import AdminDashboard from '@/views/AdminDashboard.vue';
+import AdminUsers from '@/views/AdminUsers.vue';
+import AdminSystemPrompts from '@/views/AdminSystemPrompts.vue';
+import AdminDbConnections from '@/views/AdminDbConnections.vue';
+import AdminSchemaMetadata from '@/views/AdminSchemaMetadata.vue';
+import AdminLlmConnections from '@/views/AdminLlmConnections.vue';
 import type { QueryResponse } from '@/types/api';
 
 const router = useRouter();
@@ -479,14 +655,55 @@ const {
 const activeTab = ref('chat');
 const currentMessage = ref('');
 
-// Watch user state changes
+// Menu expansion states
+const isUserMenuExpanded = ref(true);
+const isAdminMenuExpanded = ref(true);
+
+// Function to get tab title
+const getTabTitle = () => {
+  switch (activeTab.value) {
+    case 'chat':
+      return '새로운 질문';
+    case 'history':
+      return '대화 기록';
+    case 'saved':
+      return '저장된 쿼리';
+    case 'database':
+      return '분석 데이터 정보';
+    case 'profile':
+      return '사용자 프로필';
+    case 'admin-dashboard':
+      return '관리자 대시보드';
+    case 'admin-users':
+      return '사용자 관리';
+    case 'admin-prompts':
+      return '시스템 프롬프트 관리';
+    case 'admin-db-connections':
+      return 'DB 연결 관리';
+    case 'admin-schema-metadata':
+      return '스키마 메타데이터 관리';
+    case 'admin-llm-connections':
+      return 'LLM 연결 관리';
+    default:
+      return '새로운 질문';
+  }
+};
+
+// Watch user state changes and set initial tab for admin
 watch(user, (newUser, oldUser) => {
   logger.debug('User state changed in ChatInterface:', {
     hasNewUser: !!newUser,
     hasOldUser: !!oldUser,
     newUserEmail: newUser?.email,
-    oldUserEmail: oldUser?.email
+    oldUserEmail: oldUser?.email,
+    newUserRole: newUser?.role
   });
+  
+  // Set initial tab for admin users
+  if (newUser && newUser.role === 'admin' && activeTab.value === 'chat') {
+    activeTab.value = 'admin-dashboard';
+    logger.debug('Setting initial tab to admin-dashboard for admin user');
+  }
 }, { immediate: true });
 
 const isConnected = computed(() => {
@@ -892,6 +1109,11 @@ const handleConnPanelClose = () => {
   });
 };
 
+// Function to handle admin navigation from dashboard
+const handleAdminNavigation = (tabName: string) => {
+  activeTab.value = tabName;
+};
+
 // Watch computed messages for changes and auto-scroll
 watch(
   () => messages.value.length,
@@ -919,6 +1141,7 @@ onMounted(async () => {
     hasUser: !!user.value,
     userEmail: user.value?.email,
     userFullName: user.value?.full_name,
+    userRole: user.value?.role,
     hasToken: !!token.value
   });
   
@@ -926,6 +1149,12 @@ onMounted(async () => {
   if (token.value && !user.value) {
     logger.debug('Token exists but no user info - fetching profile...');
     await fetchUserProfile();
+  }
+  
+  // Set initial tab for admin users
+  if (user.value && user.value.role === 'admin') {
+    activeTab.value = 'admin-dashboard';
+    logger.debug('Setting initial tab to admin-dashboard for admin user');
   }
   
   // Load user's chat sessions & connections

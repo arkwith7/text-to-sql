@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import type { QueryRequest, QueryResponse, SchemaInfo } from '@/types/api';
+import type { QueryRequest, QueryResponse, SchemaInfo, User } from '@/types/api';
 import { useAuth } from './useAuth';
 
 export function useApi() {
@@ -11,7 +11,7 @@ export function useApi() {
     loading.value = true;
     error.value = null;
     try {
-      const request: QueryRequest = { question, connection_id: connectionId };
+      const request: QueryRequest = { question, context: connectionId };
       const response = await api.post<QueryResponse>('/api/v1/query', request);
       return response.data;
     } catch (err: any) {
@@ -48,6 +48,94 @@ export function useApi() {
   const deleteConnection = (id: string) => api.delete<void>(`/api/v1/connections/${id}`);
   const testConnection = (id: string) => api.post<any>(`/api/v1/connections/${id}/test`);
 
+  // Admin User Management
+  const getAllUsers = async (
+    page: number = 1, 
+    pageSize: number = 10, 
+    search?: string, 
+    role?: string, 
+    status?: string
+  ) => {
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        page_size: pageSize.toString()
+      });
+      if (search) {
+        params.append('search', search);
+      }
+      if (role) {
+        params.append('role', role);
+      }
+      if (status) {
+        params.append('status', status);
+      }
+      const response = await api.get(`/api/v1/admin/users?${params}`);
+      return response.data;
+    } catch (err: any) {
+      console.error('Failed to fetch users:', err);
+      throw err;
+    }
+  };
+
+  const getUserDetail = async (userId: string) => {
+    try {
+      const response = await api.get(`/api/v1/admin/users/${userId}`);
+      return response.data;
+    } catch (err: any) {
+      console.error('Failed to fetch user detail:', err);
+      throw err;
+    }
+  };
+
+  const createUser = async (userData: any) => {
+    try {
+      const response = await api.post('/api/v1/admin/users', userData);
+      return response.data;
+    } catch (err: any) {
+      console.error('Failed to create user:', err);
+      throw err;
+    }
+  };
+
+  const updateUser = async (userId: string, userData: any) => {
+    try {
+      const response = await api.put(`/api/v1/admin/users/${userId}`, userData);
+      return response.data;
+    } catch (err: any) {
+      console.error('Failed to update user:', err);
+      throw err;
+    }
+  };
+
+  const deleteUser = async (userId: string) => {
+    try {
+      const response = await api.delete(`/api/v1/admin/users/${userId}`);
+      return response.data;
+    } catch (err: any) {
+      console.error('Failed to delete user:', err);
+      throw err;
+    }
+  };
+
+  const updateUserRole = async (userId: string, newRole: string): Promise<void> => {
+    try {
+      await api.put<void>(`/api/v1/admin/users/${userId}/role`, { new_role: newRole });
+    } catch (err: any) {
+      console.error('Failed to update user role:', err);
+      throw err;
+    }
+  };
+
+  const updateUserStatus = async (userId: string, isActive: boolean): Promise<void> => {
+    try {
+      await api.put<void>(`/api/v1/admin/users/${userId}/status`, { is_active: isActive });
+    } catch (err: any) {
+      console.error('Failed to update user status:', err);
+      throw err;
+    }
+  };
+
   return {
     loading,
     error,
@@ -60,6 +148,15 @@ export function useApi() {
     createConnection,
     updateConnection,
     deleteConnection,
-    testConnection
+    testConnection,
+
+    // Admin User Management
+    getAllUsers,
+    getUserDetail,
+    createUser,
+    updateUser,
+    deleteUser,
+    updateUserRole,
+    updateUserStatus
   };
 }

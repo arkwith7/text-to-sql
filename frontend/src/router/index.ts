@@ -40,6 +40,42 @@ const routes = [
     name: 'Connections',
     component: () => import('@/views/Connections.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/admin',
+    name: 'AdminDashboard',
+    component: () => import('@/views/AdminDashboard.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/users',
+    name: 'AdminUsers',
+    component: () => import('@/views/AdminUsers.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/system-prompts',
+    name: 'AdminSystemPrompts',
+    component: () => import('@/views/AdminSystemPrompts.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/db-connections',
+    name: 'AdminDbConnections',
+    component: () => import('@/views/AdminDbConnections.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/schema-metadata',
+    name: 'AdminSchemaMetadata',
+    component: () => import('@/views/AdminSchemaMetadata.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/llm-connections',
+    name: 'AdminLlmConnections',
+    component: () => import('@/views/AdminLlmConnections.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
   }
 ];
 
@@ -67,6 +103,9 @@ router.beforeEach((to, _from, next) => {
     next('/login');
   } else if (to.meta.requiresGuest && isAuthenticated.value) {
     logger.info('Already authenticated - redirecting to home');
+    next('/home');
+  } else if (to.meta.requiresAdmin && user.value?.role !== 'admin') {
+    logger.warn('Admin access denied - redirecting to home');
     next('/home');
   } else {
     logger.debug('Navigation allowed');

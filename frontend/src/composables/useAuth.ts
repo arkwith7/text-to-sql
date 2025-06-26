@@ -21,8 +21,10 @@ logger.debug('API 설정 정보:', {
 // Global auth state
 const user = ref<User | null>(null);
 const token = ref<string | null>(localStorage.getItem('auth_token'));
+const refreshToken = ref<string | null>(localStorage.getItem('refresh_token'));
 const loading = ref(false);
 const error = ref<string | null>(null);
+const isRefreshing = ref(false);
 
 // Configure axios with auth header
 const api = axios.create({
@@ -62,31 +64,105 @@ api.interceptors.request.use((config) => {
 // Add response interceptor to handle auth errors
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Only clear auth state for authentication-related endpoints
+  async (error) => {
+    const originalRequest = error.config;
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
       const url = error.config?.url || '';
       const isAuthEndpoint = url.includes('/auth/') || url.includes('/api/v1/auth/me');
       
       logger.debug('401 Error 감지:', {
         url,
         isAuthEndpoint,
-        shouldLogout: isAuthEndpoint
+        tokenExists: !!token.value,
+        refreshTokenExists: !!refreshToken.value,
+        isRefreshing: isRefreshing.value
       });
       
-      if (isAuthEndpoint) {
-        // Token expired or invalid on auth endpoints - clear auth state
-        logger.info('인증 엔드포인트에서 401 에러 - 로그아웃 처리');
-        const authLogout = () => {
+      // If we have a refresh token and not already refreshing, try to refresh
+      if (refreshToken.value && !isRefreshing.value && !originalRequest._retry) {
+        originalRequest._retry = true;
+        isRefreshing.value = true;
+        
+        try {
+          logger.info('토큰 갱신 시도 중...');
+          
+          const refreshResponse = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
+            refresh_token: refreshToken.value
+          });
+          
+          const newTokenData = refreshResponse.data;
+          
+          // Update tokens
+          token.value = newTokenData.access_token;
+          refreshToken.value = newTokenData.refresh_token;
+          localStorage.setItem('auth_token', newTokenData.access_token);
+          localStorage.setItem('refresh_token', newTokenData.refresh_token);
+          
+          // Update user data if provided
+          if (newTokenData.user) {
+            user.value = newTokenData.user;
+          }
+          
+          logger.success('토큰 갱신 성공');
+          
+          // Retry the original request with new token
+          originalRequest.headers.Authorization = `Bearer ${newTokenData.access_token}`;
+          return api(originalRequest);
+          
+        } catch (refreshError) {
+          logger.error('토큰 갱신 실패:', refreshError);
+          
+          // Refresh failed, clear auth state and redirect to login
           token.value = null;
+          refreshToken.value = null;
           user.value = null;
           localStorage.removeItem('auth_token');
-          error.value = null;
-        };
-        authLogout();
-      } else {
-        // For non-auth endpoints, just log the error but don't clear auth state
-        logger.warn('비인증 엔드포인트에서 401 에러 - 인증 상태 유지:', { url });
+          localStorage.removeItem('refresh_token');
+          error.value = 'Your session has expired. Please log in again.';
+          
+          window.dispatchEvent(new CustomEvent('token-expired', { 
+            detail: { 
+              message: 'Your session has expired. Please log in again.',
+              url: url 
+            } 
+          }));
+          
+          setTimeout(() => {
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login';
+            }
+          }, 2000);
+          
+        } finally {
+          isRefreshing.value = false;
+        }
+      } else if (token.value && !refreshToken.value) {
+        // No refresh token available, clear auth state
+        logger.info('리프레시 토큰이 없어 자동 로그아웃 처리');
+        
+        token.value = null;
+        user.value = null;
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        error.value = 'Your session has expired. Please log in again.';
+        
+        window.dispatchEvent(new CustomEvent('token-expired', { 
+          detail: { 
+            message: 'Your session has expired. Please log in again.',
+            url: url 
+          } 
+        }));
+        
+        setTimeout(() => {
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+        }, 2000);
+      } else if (!token.value && isAuthEndpoint) {
+        // No token and auth endpoint failed
+        logger.info('인증 엔드포인트에서 401 에러 - 이미 로그아웃 상태');
+        error.value = 'Authentication required. Please log in.';
       }
     }
     return Promise.reject(error);
@@ -106,8 +182,10 @@ export function useAuth() {
       
       // Store token and user data
       token.value = tokenData.access_token;
+      refreshToken.value = tokenData.refresh_token;
       user.value = tokenData.user;
       localStorage.setItem('auth_token', tokenData.access_token);
+      localStorage.setItem('refresh_token', tokenData.refresh_token);
       
       return true;
     } catch (err: any) {
@@ -140,8 +218,10 @@ export function useAuth() {
       
       // Store token and user data
       token.value = tokenData.access_token;
+      refreshToken.value = tokenData.refresh_token;
       user.value = tokenData.user;
       localStorage.setItem('auth_token', tokenData.access_token);
+      localStorage.setItem('refresh_token', tokenData.refresh_token);
       
       logger.debug('토큰과 사용자 정보 저장 완료');
       
@@ -166,11 +246,13 @@ export function useAuth() {
     
     // Clear all auth state
     token.value = null;
+    refreshToken.value = null;
     user.value = null;
     error.value = null;
     
     // Clear localStorage
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('refresh_token');
     
     logger.success('로그아웃 완료 - 모든 상태 초기화됨');
   };
