@@ -1,0 +1,37 @@
+🔗 Text-to-SQL PostgreSQL 연결 정보
+
+== 읽기 전용 사용자 (Text-to-SQL 시스템용) ✅ 연결 확인됨 ==
+Host: localhost
+Port: 5432
+Database: northwind
+User: texttosql_reader
+Password: readonly_secure_password_2024
+
+연결 URL: postgresql://texttosql_reader:readonly_secure_password_2024@localhost:5432/northwind
+
+⚠️ 중요: Text-to-SQL 시스템에서는 반드시 이 읽기 전용 사용자를 사용하세요!
+       이 사용자는 SELECT 쿼리만 실행할 수 있어 데이터 손상을 방지합니다.
+
+✅ 연결 테스트 결과 (2025-06-27):
+   - 데이터베이스 연결: 성공
+   - SELECT 쿼리: 성공 (customers 테이블 91개 레코드 확인)
+   - 스키마 조회: 성공 (테이블 구조 정보 접근 가능)
+   - INSERT 쿼리: 차단됨 (권한 거부 - 정상)
+
+🔧 연결 테스트 명령어:
+   docker exec northwind-postgres psql -U texttosql_reader -d northwind -c "SELECT COUNT(*) FROM customers;"
+
+⚠️ Bash 사용 시 주의사항:
+   - 쿼리에 느낌표(!) 사용 시: 작은따옴표 사용 또는 \! 로 이스케이프
+   - 예: "SELECT 'success' ..." (O)  "SELECT 'success!' ..." (X)
+
+== 관리자 사용자 (관리 목적만) ==
+Host: localhost
+Port: 5432  
+Database: northwind
+User: postgres
+Password: password
+
+연결 URL: postgresql://postgres:password@localhost:5432/northwind
+
+📖 자세한 정보: README.md, QUICK_REFERENCE.md, TROUBLESHOOTING.md 참조
